@@ -1,0 +1,16 @@
+# Al repositorio solo va lo que el juego necesita para cargar el addon.
+# README, CHANGELOG, docs/, CLAUDE.md y .agents/ se quedan solo en local.
+/*
+!/.gitignore
+!/wcdpanel.toc
+!/embeds.xml
+!/Libs/
+!/Locales/
+!/Core/
+!/Plugins/
+
+# Restos de editores y del sistema dentro de las carpetas del addon
+*.bak
+*.swp
+.DS_Store
+Thumbs.db

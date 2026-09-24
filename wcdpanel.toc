@@ -1,0 +1,19 @@
+## Interface: 30300
+## Title: wcdpanel
+## Notes: Barras de información configurables, con plugins opcionales - WarCrafted
+## Author: WarCrafted
+## Version: 0.1.0-alpha
+## SavedVariables: WCDPanelDB
+## OptionalDeps: LibDBIcon-1.0
+
+embeds.xml
+
+Locales\enUS.lua
+Locales\esES.lua
+
+Core\Core.lua
+Core\DB.lua
+Core\Combat.lua
+Core\Scheduler.lua
+
+Plugins\Plugins.xml
