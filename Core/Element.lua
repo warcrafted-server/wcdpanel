@@ -18,6 +18,21 @@ local function defaultElementConfig(placement)
 	}
 end
 
+-- Los elementos se crean como hijos de UIParent y se anclan a su barra por posición, pero
+-- deben ser TAMBIÉN hijos de verdad de esa barra: si no, heredan la strata de UIParent en vez
+-- de la de la barra (que es más alta, DIALOG) y la barra les tapa los clics; y su opacidad no
+-- sigue a la de la barra (rompe el desvanecido de autoocultar, que solo cambia el alpha del
+-- frame de fondo).
+local function reparentToBar(frame, barId)
+	local barRuntime = barId and WCDPanel.bars[barId]
+	if barRuntime then
+		frame:SetParent(barRuntime.frame)
+		frame:SetFrameStrata(barRuntime.frame:GetFrameStrata())
+	else
+		frame:SetParent(UIParent)
+	end
+end
+
 function WCDPanel:EnsureElementConfig(id, defaultPlacement)
 	local elements = self.db.profile.elements
 	if not elements[id] then
@@ -73,12 +88,20 @@ function WCDPanel:RegisterElement(id, plugin, subId, info)
 
 	local placement = (info and info.defaultPlacement) or plugin.opts.defaultPlacement
 	local cfg = self:EnsureElementConfig(id, placement)
-	local frame = CreateElementFrame(id, plugin)
+	-- info.foreignFrame: el botón de otro addon (ver Plugins/MinimapButtons), adoptado tal
+	-- cual en vez de crear el nuestro. Layout aún puede posicionarlo (ver la indirección
+	-- SetPoint/ClearAllPoints en Core/Layout.lua); no le tocamos su OnClick/OnEnter/icono.
+	local foreign = info and info.foreignFrame
+	local frame = foreign or CreateElementFrame(id, plugin)
+	if foreign and WCDPanel.AttachElementDrag then
+		WCDPanel:AttachElementDrag(id, frame)
+	end
 
 	local runtime = { id = id, plugin = plugin, subId = subId, info = info, frame = frame }
 	self.elements[id] = runtime
 	plugin._elements[id] = true
 
+	reparentToBar(frame, cfg.bar)
 	self:UpdateElementDisplay(id)
 	if cfg.bar then
 		self:LayoutMarkDirty(cfg.bar)
@@ -93,7 +116,7 @@ function WCDPanel:UnregisterElement(id)
 	if not runtime then return end
 	local cfg = self.db.profile.elements[id]
 	runtime.frame:Hide()
-	runtime.frame:SetParent(nil)
+	runtime.frame:SetParent(UIParent)
 	self.elements[id] = nil
 	runtime.plugin._elements[id] = nil
 	if cfg then self:LayoutMarkDirty(cfg.bar) end
@@ -116,6 +139,7 @@ function WCDPanel:PlaceElement(id, barId, zone, order)
 	if zone then cfg.zone = zone end
 	if order then cfg.order = order end
 
+	reparentToBar(runtime.frame, cfg.bar)
 	if not cfg.bar then
 		runtime.frame:Hide()
 	end
@@ -131,6 +155,9 @@ end
 function WCDPanel:UpdateElementDisplay(id)
 	local runtime = self.elements[id]
 	if not runtime then return end
+	if runtime.info and runtime.info.foreignFrame then
+		return -- el propio addon pinta su icono; solo lo posicionamos (Layout)
+	end
 	local plugin, frame = runtime.plugin, runtime.frame
 	local cfg = self.db.profile.elements[id]
 	local general = self.db.profile.general

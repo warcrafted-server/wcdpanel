@@ -7,12 +7,20 @@ local hasDirty = false
 
 local frame = CreateFrame("Frame")
 frame:SetScript("OnUpdate", function(self, elapsed)
+	-- Recorrido en dos pasadas: t.fn puede añadir o quitar temporizadores (por ejemplo,
+	-- encadenar un reintento con StartTicker/StopTicker), y modificar la tabla de
+	-- "tickers" mientras la recorremos con pairs() no está garantizado en Lua.
+	local due
 	for id, t in pairs(tickers) do
 		t.elapsed = t.elapsed + elapsed
 		if t.elapsed >= t.interval then
 			t.elapsed = 0
-			t.fn(t.interval)
+			due = due or {}
+			table.insert(due, t)
 		end
+	end
+	if due then
+		for _, t in ipairs(due) do t.fn(t.interval) end
 	end
 
 	if hasDirty then

@@ -12,6 +12,25 @@ function WCDPanel:LayoutMarkDirty(barId)
 	end)
 end
 
+-- Un elemento "adoptado" (botón de minimapa ajeno, ver Plugins/MinimapButtons) anula su
+-- propio SetPoint/ClearAllPoints para que el addon original no se recoloque solo; aquí usamos
+-- los originales guardados para que Layout sí pueda posicionarlo.
+local function clearPoints(frame)
+	if frame._wcdRealClearAllPoints then
+		frame._wcdRealClearAllPoints(frame)
+	else
+		frame:ClearAllPoints()
+	end
+end
+
+local function setPoint(frame, ...)
+	if frame._wcdRealSetPoint then
+		frame._wcdRealSetPoint(frame, ...)
+	else
+		frame:SetPoint(...)
+	end
+end
+
 local function collectZones(elements, barId)
 	local zones = { LEFT = {}, CENTER = {}, RIGHT = {} }
 	for id, cfg in pairs(elements) do
@@ -31,13 +50,13 @@ local function layoutEdgeZone(self, list, bar, anchorPoint, growPoint, sign, spa
 	for _, item in ipairs(list) do
 		local runtime = self.elements[item.id]
 		local frame = runtime.frame
-		frame:ClearAllPoints()
+		clearPoints(frame)
 		if runtime.plugin.opts.secure then
-			frame:SetPoint(anchorPoint, bar, anchorPoint, sign * cursor, 0)
+			setPoint(frame, anchorPoint, bar, anchorPoint, sign * cursor, 0)
 		elseif prevFrame then
-			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * spacing, 0)
+			setPoint(frame, anchorPoint, prevFrame, growPoint, sign * spacing, 0)
 		else
-			frame:SetPoint(anchorPoint, bar, anchorPoint, sign * cursor, 0)
+			setPoint(frame, anchorPoint, bar, anchorPoint, sign * cursor, 0)
 		end
 		frame:Show()
 		cursor = cursor + frame:GetWidth() + spacing
@@ -58,13 +77,13 @@ local function layoutCenterZone(self, list, bar, spacing)
 	for _, item in ipairs(list) do
 		local runtime = self.elements[item.id]
 		local frame = runtime.frame
-		frame:ClearAllPoints()
+		clearPoints(frame)
 		if runtime.plugin.opts.secure then
-			frame:SetPoint("LEFT", bar, "CENTER", cursor, 0)
+			setPoint(frame, "LEFT", bar, "CENTER", cursor, 0)
 		elseif prevFrame then
-			frame:SetPoint("LEFT", prevFrame, "RIGHT", spacing, 0)
+			setPoint(frame, "LEFT", prevFrame, "RIGHT", spacing, 0)
 		else
-			frame:SetPoint("LEFT", bar, "CENTER", cursor, 0)
+			setPoint(frame, "LEFT", bar, "CENTER", cursor, 0)
 		end
 		frame:Show()
 		cursor = cursor + frame:GetWidth() + spacing

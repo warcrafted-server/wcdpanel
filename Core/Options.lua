@@ -82,6 +82,18 @@ local function buildBarArgs()
 	return args
 end
 
+local function barChoices()
+	local choices = { [false] = "(ninguna)" }
+	for id, cfg in pairs(WCDPanel.db.profile.bars) do
+		choices[id] = (cfg.name or ("Barra " .. id)) .. " (" .. (EDGE_NAMES[cfg.edge] or cfg.edge) .. ")"
+	end
+	return choices
+end
+
+local function elementCfg(pid)
+	return WCDPanel.db.profile.elements[pid]
+end
+
 local function buildPluginArgs()
 	local args = {}
 	for order, pid in ipairs(WCDPanel.pluginOrder) do
@@ -103,11 +115,38 @@ local function buildPluginArgs()
 				},
 			},
 		}
+		-- Un plugin con un único elemento fijo se puede colocar desde aquí; uno con
+		-- elementos dinámicos (LDB, profesiones...) gestiona su propia colocación.
+		if not plugin.opts.dynamicElements then
+			group.args.bar = {
+				type = "select", order = 2, name = "Barra",
+				values = barChoices(),
+				get = function() local c = elementCfg(pid) return c and c.bar or false end,
+				set = function(_, v) WCDPanel:PlaceElement(pid, v) end,
+			}
+			group.args.zone = {
+				type = "select", order = 3, name = "Zona",
+				values = { LEFT = "Izquierda", CENTER = "Centro", RIGHT = "Derecha" },
+				get = function() local c = elementCfg(pid) return c and c.zone or "LEFT" end,
+				set = function(_, v)
+					local c = elementCfg(pid)
+					WCDPanel:PlaceElement(pid, c and c.bar, v)
+				end,
+			}
+			group.args.order = {
+				type = "range", order = 4, name = "Orden", min = 1, max = 20, step = 1,
+				get = function() local c = elementCfg(pid) return c and c.order or 1 end,
+				set = function(_, v)
+					local c = elementCfg(pid)
+					WCDPanel:PlaceElement(pid, c and c.bar, nil, v)
+				end,
+			}
+		end
 		if plugin.GetOptions then
 			local sub = plugin:GetOptions()
 			if sub then
 				for key, opt in pairs(sub) do
-					opt.order = (opt.order or 0) + 1
+					opt.order = (opt.order or 0) + 10
 					group.args[key] = opt
 				end
 			end

@@ -115,7 +115,7 @@ end
 
 function WCDPanel:ConcealBar(id)
 	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
-	if cfg and runtime and cfg.autoHide then runtime.frame:SetAlpha(0.05) end
+	if cfg and runtime and cfg.autoHide then runtime.frame:SetAlpha(0.15) end
 end
 
 function WCDPanel:SetBarAutoHide(id, enabled)
@@ -166,7 +166,10 @@ function WCDPanel:DeleteBar(id)
 		if cfg.bar == id then
 			cfg.bar = false
 			local runtime = self.elements[elId]
-			if runtime then runtime.frame:Hide() end
+			if runtime then
+				runtime.frame:Hide()
+				runtime.frame:SetParent(UIParent)
+			end
 		end
 	end
 	if self.ScreenAdjustAll then self:ScreenAdjustAll() end
