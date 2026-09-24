@@ -15,5 +15,11 @@ Core\Core.lua
 Core\DB.lua
 Core\Combat.lua
 Core\Scheduler.lua
+Core\PluginAPI.lua
+Core\Layout.lua
+Core\Element.lua
+Core\Bar.lua
+Core\ScreenAdjust.lua
+Core\Menu.lua
 
 Plugins\Plugins.xml

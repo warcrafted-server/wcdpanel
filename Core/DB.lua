@@ -8,6 +8,7 @@ local defaults = {
 			font = { name = "Friz Quadrata TT", size = 10 },
 			hideTooltipsInCombat = false,
 			ldbLaunchersRight = true,
+			adjust = {},
 		},
 		bars = {},
 		plugins = {},
