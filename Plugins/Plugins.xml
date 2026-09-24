@@ -3,6 +3,7 @@
 	<Script file="AutoHide\AutoHide.lua"/>
 	<Script file="LDB\LDB.lua"/>
 	<Script file="MinimapButtons\MinimapButtons.lua"/>
+	<Script file="Professions\Professions.lua"/>
 	<Script file="_Test\_Test.lua"/>
 	<!-- Cada plugin nuevo añade aquí su <Script file="NombrePlugin\NombrePlugin.lua"/>. -->
 </Ui>
