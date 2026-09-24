@@ -21,5 +21,7 @@ Core\Element.lua
 Core\Bar.lua
 Core\ScreenAdjust.lua
 Core\Menu.lua
+Core\DragDrop.lua
+Core\Options.lua
 
 Plugins\Plugins.xml

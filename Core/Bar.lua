@@ -19,6 +19,7 @@ local function defaultBarConfig(opts)
 		autoHide = false,
 		screenAdjust = (opts.edge or "TOP") ~= "FREE",
 		hideInCombat = false,
+		locked = false,
 		x = opts.x or 200,
 		y = opts.y or 200,
 		width = opts.width or 200,
@@ -39,6 +40,7 @@ local function createBarFrame(id)
 	frame.bg = frame:CreateTexture(frame:GetName() .. "Bg", "BACKGROUND")
 	frame.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
 	frame.bg:SetAllPoints(frame)
+	if WCDPanel.AttachBarDrag then WCDPanel:AttachBarDrag(id, frame) end
 	return frame
 end
 

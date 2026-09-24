@@ -47,6 +47,7 @@ function WCDPanel:OnLogin()
 
 	self:ActivateBars()
 	self:ActivatePlugins()
+	self:InitOptions()
 	self:Print(L["wcdpanel loaded. Type /wcd for options."])
 end
 
@@ -87,8 +88,10 @@ local function handleSlash(msg)
 		else
 			WCDPanel:Print("uso: /wcd put <elemento> <barra> <left|center|right> <orden>")
 		end
+	elseif cmd == "" then
+		WCDPanel:OpenOptions()
 	else
-		WCDPanel:Print(L["wcdpanel loaded. Type /wcd for options."])
+		WCDPanel:Print("uso: /wcd (abre las opciones) | bar add|del|list | put <elemento> <barra> <left|center|right> <orden>")
 	end
 end
 

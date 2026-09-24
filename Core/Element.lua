@@ -63,6 +63,8 @@ local function CreateElementFrame(id, plugin)
 	end)
 	frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+	if WCDPanel.AttachElementDrag then WCDPanel:AttachElementDrag(id, frame) end
+
 	return frame
 end
 
