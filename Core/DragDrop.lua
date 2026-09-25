@@ -1,10 +1,11 @@
 -- Arrastrar y soltar. El elemento real (que puede ser un botón seguro) nunca se mueve
 -- durante el gesto: solo sigue al cursor un "fantasma" sin proteger; al soltar se escribe
--- la nueva colocación en la base de datos y es Layout (ya seguro en combate) quien la aplica.
+-- la nueva colocación y es Layout (aplazado fuera de combate) quien la aplica.
 
 local ghost = CreateFrame("Frame", "WCDPanelDragGhost", UIParent)
 ghost:SetFrameStrata("TOOLTIP")
-ghost:SetSize(16, 16)
+ghost:SetWidth(20)
+ghost:SetHeight(20)
 ghost.icon = ghost:CreateTexture(nil, "OVERLAY")
 ghost.icon:SetAllPoints(ghost)
 ghost:Hide()
@@ -21,16 +22,16 @@ local function elementDraggable(id)
 	if WCDPanel.db.profile.general.locked then return false end
 	local cfg = WCDPanel.db.profile.elements[id]
 	local barCfg = cfg and cfg.bar and WCDPanel.db.profile.bars[cfg.bar]
-	if barCfg and barCfg.locked then return false end
-	return true
+	return not (barCfg and barCfg.locked)
 end
 
+-- Devuelve la barra bajo el cursor y la x del cursor en las coordenadas de esa barra.
 local function findBarUnderCursor()
-	local x, y = GetCursorPosition()
-	local scale = UIParent:GetEffectiveScale()
-	x, y = x / scale, y / scale
+	local cx, cy = GetCursorPosition()
 	for id, runtime in pairs(WCDPanel.bars) do
 		local f = runtime.frame
+		local scale = f:GetEffectiveScale()
+		local x, y = cx / scale, cy / scale
 		local left, right, top, bottom = f:GetLeft(), f:GetRight(), f:GetTop(), f:GetBottom()
 		if left and x >= left and x <= right and y >= bottom and y <= top then
 			return id, x
@@ -47,40 +48,35 @@ local function zoneAt(barFrame, x)
 	return "CENTER"
 end
 
--- Reordena la zona insertando draggedId según la posición horizontal soltada, y renumera
--- el orden de todos sus elementos para que quede una secuencia limpia.
+-- Inserta draggedId en la zona según la x soltada y renumera el orden de toda la zona.
 local function reorderZone(barId, zone, draggedId, cursorX)
 	local list = {}
 	for id, cfg in pairs(WCDPanel.db.profile.elements) do
-		if cfg.bar == barId and cfg.zone == zone and id ~= draggedId then
-			local runtime = WCDPanel.elements[id]
-			if runtime then
-				table.insert(list, { id = id, x = runtime.frame:GetLeft() or 0, order = cfg.order })
-			end
+		local runtime = WCDPanel.elements[id]
+		if runtime and cfg.bar == barId and cfg.zone == zone and id ~= draggedId then
+			local left, right = runtime.frame:GetLeft(), runtime.frame:GetRight()
+			local center = left and right and (left + right) / 2 or 0
+			table.insert(list, { id = id, center = center })
 		end
 	end
-	table.sort(list, function(a, b) return a.order < b.order end)
+	table.sort(list, function(a, b) return a.center < b.center end)
 
 	local insertAt = #list + 1
 	for i, item in ipairs(list) do
-		if cursorX < item.x then
-			insertAt = i
-			break
-		end
+		if cursorX < item.center then insertAt = i break end
 	end
 	table.insert(list, insertAt, { id = draggedId })
 
+	-- En RIGHT el orden 1 es el más pegado al borde derecho: se numera de derecha a izquierda.
+	local count = #list
 	for i, item in ipairs(list) do
-		WCDPanel.db.profile.elements[item.id].order = i
+		WCDPanel.db.profile.elements[item.id].order = zone == "RIGHT" and (count - i + 1) or i
 	end
 end
 
 function WCDPanel:HandleElementDrop(id)
 	local barId, cursorX = findBarUnderCursor()
-	if not barId then
-		self:PlaceElement(id, false)
-		return
-	end
+	if not barId then return end -- soltado fuera de toda barra: se queda donde estaba
 	local zone = zoneAt(self.bars[barId].frame, cursorX)
 	reorderZone(barId, zone, id, cursorX)
 	self:PlaceElement(id, barId, zone)
@@ -91,36 +87,38 @@ function WCDPanel:AttachElementDrag(id, frame)
 	frame:SetScript("OnDragStart", function(self)
 		if not elementDraggable(id) then return end
 		draggingId = id
-		ghost.icon:SetTexture(self.icon and self.icon:GetTexture())
-		ghost:SetSize(WCDPanel.db.profile.general.iconSize, WCDPanel.db.profile.general.iconSize)
+		local texture = self.icon and self.icon:IsShown() and self.icon:GetTexture()
+		ghost.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
 		ghost:Show()
-		self:SetAlpha(0.3)
+		self:SetAlpha(0.4)
 	end)
 	frame:SetScript("OnDragStop", function(self)
 		ghost:Hide()
 		self:SetAlpha(1)
 		if draggingId == id then
-			WCDPanel:HandleElementDrop(id)
 			draggingId = nil
+			WCDPanel:HandleElementDrop(id)
 		end
 	end)
 end
 
--- Las barras nunca son frames protegidos, así que StartMoving/StopMovingOrSizing es seguro
--- incluso con elementos seguros anclados encima: solo se mueve el padre, no el hijo protegido.
+-- Las barras libres se mueven arrastrando su fondo. StartMoving sobre la barra es seguro
+-- fuera de combate; en combate no se permite (puede tener botones seguros anclados).
 function WCDPanel:AttachBarDrag(id, frame)
 	frame:SetMovable(true)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", function(self)
 		local cfg = WCDPanel.db.profile.bars[id]
-		if WCDPanel.db.profile.general.locked or cfg.locked or cfg.edge ~= "FREE" then return end
+		if InCombatLockdown() or WCDPanel.db.profile.general.locked or cfg.locked or cfg.edge ~= "FREE" then return end
+		self.moving = true
 		self:StartMoving()
 	end)
 	frame:SetScript("OnDragStop", function(self)
+		if not self.moving then return end
+		self.moving = nil
 		self:StopMovingOrSizing()
 		local cfg = WCDPanel.db.profile.bars[id]
-		if cfg.edge ~= "FREE" then return end
-		local _, _, _, x, y = self:GetPoint(1)
-		cfg.x, cfg.y = x, y
+		cfg.x, cfg.y = self:GetLeft(), self:GetTop()
+		WCDPanel:PositionBar(id)
 	end)
 end

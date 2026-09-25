@@ -4,6 +4,7 @@
 -- Los elementos seguros (plugin.opts.secure) son la excepción: se anclan a la propia barra
 -- con un offset absoluto en vez de al elemento anterior, para no depender de un frame
 -- protegido ni obligar a moverlo cuando cambia un vecino (ver Core/Combat.lua).
+-- Todo el reflow se aplaza fuera de combate: una barra con botones seguros queda protegida.
 
 function WCDPanel:LayoutMarkDirty(barId)
 	if not barId then return end
@@ -12,78 +13,36 @@ function WCDPanel:LayoutMarkDirty(barId)
 	end)
 end
 
--- Un elemento "adoptado" (botón de minimapa ajeno, ver Plugins/MinimapButtons) anula su
--- propio SetPoint/ClearAllPoints para que el addon original no se recoloque solo; aquí usamos
--- los originales guardados para que Layout sí pueda posicionarlo.
-local function clearPoints(frame)
-	if frame._wcdRealClearAllPoints then
-		frame._wcdRealClearAllPoints(frame)
-	else
-		frame:ClearAllPoints()
-	end
-end
-
-local function setPoint(frame, ...)
-	if frame._wcdRealSetPoint then
-		frame._wcdRealSetPoint(frame, ...)
-	else
-		frame:SetPoint(...)
-	end
-end
-
-local function collectZones(elements, barId)
+-- Solo elementos vivos: un plugin desactivado conserva su configuración (bar = X) pero ya no
+-- tiene frame.
+local function collectZones(self, barId)
 	local zones = { LEFT = {}, CENTER = {}, RIGHT = {} }
-	for id, cfg in pairs(elements) do
-		if cfg.bar == barId then
-			table.insert(zones[cfg.zone or "LEFT"], { id = id, order = cfg.order or 1 })
+	for id, cfg in pairs(self.db.profile.elements) do
+		if cfg.bar == barId and self.elements[id] then
+			local list = zones[cfg.zone] or zones.LEFT
+			table.insert(list, { id = id, order = cfg.order or 1 })
 		end
 	end
 	for _, list in pairs(zones) do
-		table.sort(list, function(a, b) return a.order < b.order end)
+		table.sort(list, function(a, b)
+			if a.order ~= b.order then return a.order < b.order end
+			return a.id < b.id
+		end)
 	end
 	return zones
 end
 
-local function layoutEdgeZone(self, list, bar, anchorPoint, growPoint, sign, spacing)
-	local cursor = spacing / 2
+local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, startOffset, relPointForBar)
+	local cursor = startOffset
 	local prevFrame
 	for _, item in ipairs(list) do
 		local runtime = self.elements[item.id]
 		local frame = runtime.frame
-		clearPoints(frame)
-		if runtime.plugin.opts.secure then
-			setPoint(frame, anchorPoint, bar, anchorPoint, sign * cursor, 0)
-		elseif prevFrame then
-			setPoint(frame, anchorPoint, prevFrame, growPoint, sign * spacing, 0)
+		frame:ClearAllPoints()
+		if prevFrame and not runtime.secure then
+			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * spacing, 0)
 		else
-			setPoint(frame, anchorPoint, bar, anchorPoint, sign * cursor, 0)
-		end
-		frame:Show()
-		cursor = cursor + frame:GetWidth() + spacing
-		prevFrame = frame
-	end
-end
-
-local function layoutCenterZone(self, list, bar, spacing)
-	if #list == 0 then return end
-	local totalWidth = 0
-	for i, item in ipairs(list) do
-		totalWidth = totalWidth + self.elements[item.id].frame:GetWidth()
-		if i > 1 then totalWidth = totalWidth + spacing end
-	end
-
-	local cursor = -totalWidth / 2
-	local prevFrame
-	for _, item in ipairs(list) do
-		local runtime = self.elements[item.id]
-		local frame = runtime.frame
-		clearPoints(frame)
-		if runtime.plugin.opts.secure then
-			setPoint(frame, "LEFT", bar, "CENTER", cursor, 0)
-		elseif prevFrame then
-			setPoint(frame, "LEFT", prevFrame, "RIGHT", spacing, 0)
-		else
-			setPoint(frame, "LEFT", bar, "CENTER", cursor, 0)
+			frame:SetPoint(anchorPoint, bar, relPointForBar, sign * cursor, 0)
 		end
 		frame:Show()
 		cursor = cursor + frame:GetWidth() + spacing
@@ -96,10 +55,21 @@ function WCDPanel:Reflow(barId)
 	if not barRuntime then return end
 
 	local spacing = self.db.profile.general.spacing
-	local zones = collectZones(self.db.profile.elements, barId)
+	local zones = collectZones(self, barId)
 	local bar = barRuntime.frame
+	local edgeGap = math.floor(spacing / 2)
 
-	layoutEdgeZone(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing)
-	layoutEdgeZone(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing)
-	layoutCenterZone(self, zones.CENTER, bar, spacing)
+	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, edgeGap, "LEFT")
+	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, edgeGap, "RIGHT")
+
+	local total = 0
+	for i, item in ipairs(zones.CENTER) do
+		total = total + self.elements[item.id].frame:GetWidth()
+		if i > 1 then total = total + spacing end
+	end
+	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, -total / 2, "CENTER")
+end
+
+function WCDPanel:ReflowAll()
+	for id in pairs(self.bars) do self:LayoutMarkDirty(id) end
 end

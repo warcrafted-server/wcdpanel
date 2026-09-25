@@ -4,25 +4,30 @@
 
 WCDPanel.bars = WCDPanel.bars or {}
 
-local function defaultBarConfig(opts)
+local BG_TEXTURE = "Interface\\ChatFrame\\ChatFrameBackground"
+local CONCEALED_ALPHA = 0.1
+local CONCEAL_DELAY = 0.6
+
+local function defaultBarConfig(id, opts)
 	opts = opts or {}
+	local edge = opts.edge or "TOP"
 	return {
-		name = opts.name or "Barra",
+		name = opts.name or ("Barra " .. id),
 		enabled = true,
-		edge = opts.edge or "TOP",
+		edge = edge,
 		stack = opts.stack or 1,
-		height = opts.height or 24,
+		height = opts.height or 22,
 		scale = 1,
 		alpha = 1,
-		bg = { r = 0, g = 0, b = 0, a = 0.5 },
+		bg = { r = 0, g = 0, b = 0, a = 0.6 },
 		strata = "DIALOG",
 		autoHide = false,
-		screenAdjust = (opts.edge or "TOP") ~= "FREE",
+		screenAdjust = edge ~= "FREE",
 		hideInCombat = false,
 		locked = false,
-		x = opts.x or 200,
-		y = opts.y or 200,
-		width = opts.width or 200,
+		x = opts.x or 300,
+		y = opts.y or 400,
+		width = opts.width or 300,
 	}
 end
 
@@ -34,34 +39,32 @@ local function nextBarId(self)
 	return max + 1
 end
 
-local function createBarFrame(id)
-	local frame = CreateFrame("Frame", "WCDPanelBar" .. id, UIParent)
-	frame:EnableMouse(true)
-	frame.bg = frame:CreateTexture(frame:GetName() .. "Bg", "BACKGROUND")
-	frame.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-	frame.bg:SetAllPoints(frame)
-	if WCDPanel.AttachBarDrag then WCDPanel:AttachBarDrag(id, frame) end
-	return frame
+-- Barra donde caen los elementos nuevos: la de id más bajo que esté activa.
+function WCDPanel:DefaultBarId()
+	local best
+	for id, cfg in pairs(self.db.profile.bars) do
+		if cfg.enabled and (not best or id < best) then best = id end
+	end
+	return best or false
 end
 
 function WCDPanel:GetBarStackOffset(id)
 	local cfg = self.db.profile.bars[id]
 	local offset = 0
-	for otherId, otherCfg in pairs(self.db.profile.bars) do
-		if otherId ~= id and otherCfg.edge == cfg.edge and otherCfg.enabled and otherCfg.stack < cfg.stack then
-			offset = offset + otherCfg.height
+	for otherId, other in pairs(self.db.profile.bars) do
+		if otherId ~= id and other.enabled and other.edge == cfg.edge
+			and (other.stack < cfg.stack or (other.stack == cfg.stack and otherId < id)) then
+			offset = offset + other.height
 		end
 	end
 	return offset
 end
 
 function WCDPanel:PositionBar(id)
-	local cfg = self.db.profile.bars[id]
-	local runtime = self.bars[id]
+	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
 	if not cfg or not runtime then return end
 	local frame = runtime.frame
 	frame:ClearAllPoints()
-
 	if cfg.edge == "FREE" then
 		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", cfg.x, cfg.y)
 		frame:SetWidth(cfg.width)
@@ -69,7 +72,7 @@ function WCDPanel:PositionBar(id)
 		local offset = self:GetBarStackOffset(id)
 		frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, offset)
 		frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 0, offset)
-	else -- TOP
+	else
 		local offset = self:GetBarStackOffset(id)
 		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -offset)
 		frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", 0, -offset)
@@ -77,52 +80,92 @@ function WCDPanel:PositionBar(id)
 	frame:SetHeight(cfg.height)
 end
 
-function WCDPanel:ApplyBarAppearance(id)
-	local cfg = self.db.profile.bars[id]
-	local runtime = self.bars[id]
-	if not cfg or not runtime then return end
-	local frame = runtime.frame
-	frame:SetScale(cfg.scale)
-	frame:SetAlpha(cfg.alpha)
-	frame:SetFrameStrata(cfg.strata)
-	frame.bg:SetVertexColor(cfg.bg.r, cfg.bg.g, cfg.bg.b, cfg.bg.a)
+-- Recoloca todas las barras (cambiar el borde, la altura o el apilado de una afecta a las demás).
+function WCDPanel:PositionAllBars()
+	self:RunOutOfCombat("positionbars", function()
+		for id in pairs(WCDPanel.bars) do WCDPanel:PositionBar(id) end
+		WCDPanel:ScreenAdjustAll()
+	end)
 end
 
--- Autoocultar: en vez de deslizar la barra fuera de pantalla (que en combate necesitaría
--- SetPoint sobre ella), se desvanece con SetAlpha, que no está restringido en combate.
-function WCDPanel:ApplyBarAutoHide(id)
-	local cfg = self.db.profile.bars[id]
-	local runtime = self.bars[id]
+-- Opacidad efectiva: la configurada, o casi transparente si está autoocultada sin el ratón
+-- encima, o 0 si se oculta en combate. SetAlpha no está restringido en combate.
+local function updateAlpha(id)
+	local cfg, runtime = WCDPanel.db.profile.bars[id], WCDPanel.bars[id]
 	if not cfg or not runtime then return end
-	local frame = runtime.frame
+	local alpha = cfg.alpha
+	if cfg.hideInCombat and InCombatLockdown() then
+		alpha = 0
+	elseif cfg.autoHide and runtime.concealed then
+		alpha = CONCEALED_ALPHA
+	end
+	runtime.frame:SetAlpha(alpha)
+end
 
-	if cfg.autoHide then
-		if not frame._autoHideHooked then
-			frame:SetScript("OnEnter", function() WCDPanel:RevealBar(id) end)
-			frame:SetScript("OnLeave", function() WCDPanel:ConcealBar(id) end)
-			frame._autoHideHooked = true
+-- OnEnter/OnLeave no sirven para autoocultar: el foco del ratón es un único frame, así que al
+-- pasar a un icono de la barra ésta recibe OnLeave. Se consulta IsMouseOver cada décima.
+local function autoHideOnUpdate(frame, elapsed)
+	frame.ahElapsed = (frame.ahElapsed or 0) + elapsed
+	if frame.ahElapsed < 0.1 then return end
+	frame.ahElapsed = 0
+	local runtime = WCDPanel.bars[frame.barId]
+	if not runtime then return end
+	local over = frame:IsMouseOver() or (DropDownList1 and DropDownList1:IsShown() and runtime.menuOpen)
+	if over then
+		runtime.lastOver = GetTime()
+		if runtime.concealed then
+			runtime.concealed = false
+			updateAlpha(frame.barId)
 		end
-		self:ConcealBar(id)
-	else
-		frame:SetAlpha(cfg.alpha)
+	elseif not runtime.concealed and GetTime() - (runtime.lastOver or 0) > CONCEAL_DELAY then
+		runtime.concealed = true
+		updateAlpha(frame.barId)
 	end
 end
 
-function WCDPanel:RevealBar(id)
+function WCDPanel:ApplyBarAutoHide(id)
 	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
-	if cfg and runtime then runtime.frame:SetAlpha(cfg.alpha) end
-end
-
-function WCDPanel:ConcealBar(id)
-	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
-	if cfg and runtime and cfg.autoHide then runtime.frame:SetAlpha(0.15) end
+	if not cfg or not runtime then return end
+	if cfg.autoHide then
+		runtime.concealed = true
+		runtime.frame:SetScript("OnUpdate", autoHideOnUpdate)
+	else
+		runtime.concealed = false
+		runtime.frame:SetScript("OnUpdate", nil)
+	end
+	updateAlpha(id)
 end
 
 function WCDPanel:SetBarAutoHide(id, enabled)
 	local cfg = self.db.profile.bars[id]
 	if not cfg then return end
-	cfg.autoHide = enabled
+	cfg.autoHide = enabled and true or false
 	self:ApplyBarAutoHide(id)
+end
+
+function WCDPanel:ApplyBarAppearance(id)
+	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
+	if not cfg or not runtime then return end
+	local frame = runtime.frame
+	frame:SetScale(cfg.scale)
+	frame:SetFrameStrata(cfg.strata)
+	frame.bg:SetVertexColor(cfg.bg.r, cfg.bg.g, cfg.bg.b, cfg.bg.a)
+	updateAlpha(id)
+end
+
+local function createBarFrame(id)
+	local frame = CreateFrame("Frame", "WCDPanelBar" .. id, UIParent)
+	frame.barId = id
+	frame:EnableMouse(true)
+	frame:SetClampedToScreen(true)
+	frame.bg = frame:CreateTexture(nil, "BACKGROUND")
+	frame.bg:SetTexture(BG_TEXTURE)
+	frame.bg:SetAllPoints(frame)
+	frame:SetScript("OnMouseUp", function(self, button)
+		if button == "RightButton" then WCDPanel:ShowBarMenu(id, self) end
+	end)
+	if WCDPanel.AttachBarDrag then WCDPanel:AttachBarDrag(id, frame) end
+	return frame
 end
 
 WCDPanel.barCreatedHooks = WCDPanel.barCreatedHooks or {}
@@ -140,39 +183,46 @@ function WCDPanel:ActivateBar(id)
 	self:ApplyBarAppearance(id)
 	self:PositionBar(id)
 	self:ApplyBarAutoHide(id)
-	if self.ScreenAdjustAll then self:ScreenAdjustAll() end
+	self:ScreenAdjustAll()
 	return self.bars[id]
 end
 
 function WCDPanel:DestroyBarFrame(id)
 	local runtime = self.bars[id]
 	if not runtime then return end
+	runtime.frame:SetScript("OnUpdate", nil)
 	runtime.frame:Hide()
 	self.bars[id] = nil
 end
 
 function WCDPanel:CreateBar(opts)
 	local id = nextBarId(self)
-	self.db.profile.bars[id] = defaultBarConfig(opts)
+	local cfg = defaultBarConfig(id, opts)
+	if not (opts and opts.stack) and cfg.edge ~= "FREE" then
+		-- Nueva barra en un borde: se apila por fuera de las que ya hay en ese borde.
+		for _, other in pairs(self.db.profile.bars) do
+			if other.edge == cfg.edge and other.stack >= cfg.stack then cfg.stack = other.stack + 1 end
+		end
+	end
+	self.db.profile.bars[id] = cfg
 	self:ActivateBar(id)
 	for _, fn in ipairs(self.barCreatedHooks) do fn(id) end
 	return id
 end
 
+-- Una barra con botones seguros anclados queda protegida en combate, así que borrarla (ocultar
+-- su frame) se aplaza hasta salir de combate.
 function WCDPanel:DeleteBar(id)
-	self:DestroyBarFrame(id)
-	self.db.profile.bars[id] = nil
-	for elId, cfg in pairs(self.db.profile.elements) do
-		if cfg.bar == id then
-			cfg.bar = false
-			local runtime = self.elements[elId]
-			if runtime then
-				runtime.frame:Hide()
-				runtime.frame:SetParent(UIParent)
+	self:RunOutOfCombat("deletebar:" .. id, function()
+		for elId, cfg in pairs(WCDPanel.db.profile.elements) do
+			if cfg.bar == id then
+				if WCDPanel.elements[elId] then WCDPanel:PlaceElement(elId, false) else cfg.bar = false end
 			end
 		end
-	end
-	if self.ScreenAdjustAll then self:ScreenAdjustAll() end
+		WCDPanel:DestroyBarFrame(id)
+		WCDPanel.db.profile.bars[id] = nil
+		WCDPanel:PositionAllBars()
+	end)
 end
 
 function WCDPanel:ActivateBars()
@@ -180,3 +230,10 @@ function WCDPanel:ActivateBars()
 		if cfg.enabled then self:ActivateBar(id) end
 	end
 end
+
+local combatFrame = CreateFrame("Frame")
+combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+combatFrame:SetScript("OnEvent", function()
+	for id in pairs(WCDPanel.bars) do updateAlpha(id) end
+end)

@@ -1,8 +1,10 @@
 -- Un botón por profesión aprendida, con su nivel, que abre la ventana correspondiente.
--- Detecta por ID de hechizo, no por nombre: en esES el nombre de la habilidad no coincide
--- con el del hechizo en las de recolección ("Herboristería" vs "Recolectar hierbas",
--- "Desollar" vs "Desuello"). Abrir una profesión es lanzar un hechizo, así que el botón tiene
--- que ser seguro (plugin.opts.secure) y sus atributos solo se tocan fuera de combate.
+--
+-- Se detecta por ID de hechizo, no por nombre: en esES el nombre de la habilidad no coincide
+-- con el del hechizo en las de recolección ("Herboristería" / "Recolectar hierbas").
+-- Abrir una profesión es lanzar un hechizo: el botón es seguro (SecureActionButtonTemplate) y
+-- usa los atributos type1/spell1 (clic izquierdo) y shift-type1/shift-spell1; el clic derecho
+-- queda libre para el menú. spell lleva el ID: SecureActionButton_OnClick usa CastSpellByID.
 --
 -- IDs verificados en SkillLine.dbc/Spell.dbc (base y esES) del propio servidor.
 local PROFESSIONS = {
@@ -17,23 +19,33 @@ local PROFESSIONS = {
 	[185] = { names = { enUS = "Cooking", esES = "Cocina" }, ranks = { 2550, 3102, 3413, 18260, 33359, 51296 }, shiftSpell = 818 },
 	[129] = { names = { enUS = "First Aid", esES = "Primeros auxilios" }, ranks = { 3273, 3274, 7924, 10846, 27028, 45542 } },
 	[186] = { names = { enUS = "Mining", esES = "Minería" }, ranks = { 2575, 2576, 3564, 10248, 29354, 50310 }, clickSpell = 2656, shiftSpell = 2580 },
-	[182] = { names = { enUS = "Herb Gathering", esES = "Recolectar hierbas" }, ranks = { 2366, 2368, 3570, 11993, 28695, 50300 }, clickSpell = 2383 },
-	[393] = { names = { enUS = "Skinning", esES = "Desuello" }, ranks = { 8613, 8617, 8618, 10768, 32678, 50305 }, noClick = true },
+	[182] = { names = { enUS = "Herbalism", esES = "Herboristería" }, ranks = { 2366, 2368, 3570, 11993, 28695, 50300 }, clickSpell = 2383 },
+	[393] = { names = { enUS = "Skinning", esES = "Desollar" }, ranks = { 8613, 8617, 8618, 10768, 32678, 50305 }, noClick = true },
 	[356] = { names = { enUS = "Fishing", esES = "Pesca" }, ranks = { 7620, 7731, 7732, 18248, 33095, 51294 } },
 	[0] = { single = 53428 }, -- Forja de runas (DK): sin línea de habilidad, sin nivel
 }
+local DISPLAY_ORDER = { 171, 164, 333, 202, 773, 755, 165, 197, 186, 182, 393, 185, 129, 356, 0 }
 
 local P = WCDPanel:NewPlugin("Professions", {
 	title = "Profesiones",
-	category = "Personaje",
+	description = "Un botón por profesión con su nivel. Clic: abre la profesión (Minería: fundir; " ..
+		"Herboristería: buscar hierbas). Mayús+clic: Minería busca minerales, Cocina enciende una hoguera.",
 	dynamicElements = true,
 	secure = true,
-	events = { "PLAYER_LOGIN", "SKILL_LINES_CHANGED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB" },
+	events = { "SKILL_LINES_CHANGED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB" },
 })
 
 local state = {}
 
-local function scanKnownSpells()
+-- Nombre de la profesión (el de la habilidad, no el del hechizo: "Herboristería", no
+-- "Recolectar hierbas"); si el idioma no está en la tabla, el del hechizo.
+local function displayName(skillLineId)
+	local def, info = PROFESSIONS[skillLineId], state[skillLineId]
+	local name = def.names and (def.names[GetLocale()] or (GetLocale() == "esMX" and def.names.esES))
+	return name or (info and GetSpellInfo(info.spellId)) or "?"
+end
+
+local function knownSpells()
 	local known = {}
 	for tab = 1, GetNumSpellTabs() do
 		local _, _, offset, numSpells = GetSpellTabInfo(tab)
@@ -46,126 +58,113 @@ local function scanKnownSpells()
 	return known
 end
 
-local function highestKnownRank(known, ranks)
+local function highestKnown(known, ranks)
 	for i = #ranks, 1, -1 do
 		if known[ranks[i]] then return ranks[i] end
 	end
 end
 
-local function findSkillLine(name)
+local function skillLineOf(name)
 	for skillLineId, def in pairs(PROFESSIONS) do
-		if def.names and (def.names.enUS == name or def.names.esES == name) then
-			return skillLineId
-		end
+		if def.names and (def.names.enUS == name or def.names.esES == name) then return skillLineId end
 	end
 end
 
--- Recorre la lista de habilidades desplegando las cabeceras plegadas (si no, sus hijos no
--- aparecen) y las vuelve a plegar tal como estaban. No toca nada si el jugador tiene la
--- ventana de habilidades abierta, para no interferirle mientras la mira.
-local function scanSkillLevels()
+-- Recorre las habilidades desplegando las cabeceras plegadas (si no, sus hijos no aparecen) y
+-- las vuelve a plegar. No toca nada con la ventana de habilidades abierta.
+local function skillLevels()
 	if SkillFrame and SkillFrame:IsVisible() then return nil end
-
-	local expandedNames = {}
+	local expanded = {}
 	local i = 1
 	while i <= GetNumSkillLines() do
 		local name, isHeader, isExpanded = GetSkillLineInfo(i)
 		if isHeader and not isExpanded then
 			ExpandSkillHeader(i)
-			table.insert(expandedNames, name)
+			expanded[name] = true
 		end
 		i = i + 1
 	end
-
 	local levels = {}
 	for j = 1, GetNumSkillLines() do
 		local name, isHeader, _, rank, _, modifier, maxRank = GetSkillLineInfo(j)
-		if not isHeader then
-			local skillLineId = findSkillLine(name)
-			if skillLineId then
-				levels[skillLineId] = { rank = rank, maxRank = maxRank, modifier = modifier or 0 }
-			end
-		end
+		local skillLineId = not isHeader and skillLineOf(name)
+		if skillLineId then levels[skillLineId] = { rank = rank, maxRank = maxRank, modifier = modifier or 0 } end
 	end
-
 	for j = GetNumSkillLines(), 1, -1 do
 		local name, isHeader = GetSkillLineInfo(j)
-		if isHeader then
-			for _, expName in ipairs(expandedNames) do
-				if expName == name then
-					CollapseSkillHeader(j)
-					break
-				end
-			end
-		end
+		if isHeader and expanded[name] then CollapseSkillHeader(j) end
 	end
-
 	return levels
 end
 
-function P:ApplyAttributes(id, skillLineId, def)
-	local runtime = WCDPanel.elements[id]
-	local info = state[skillLineId]
-	if not runtime or not info then return end
-	local spellName = GetSpellInfo(info.spellId)
-	if not spellName then return end
-
-	WCDPanel:RunOutOfCombat("profattr:" .. id, function()
+function P:ApplyAttributes(el, skillLineId)
+	local def, info = PROFESSIONS[skillLineId], state[skillLineId]
+	WCDPanel:RunOutOfCombat("profattr:" .. el, function()
+		local runtime = WCDPanel.elements[el]
+		if not runtime then return end
 		local frame = runtime.frame
 		if def.noClick then
-			frame:SetAttribute("type", nil)
-			frame:SetAttribute("spell", nil)
-		elseif def.clickSpell then
-			frame:SetAttribute("type", "spell")
-			frame:SetAttribute("spell", GetSpellInfo(def.clickSpell))
+			frame:SetAttribute("type1", nil)
+			frame:SetAttribute("spell1", nil)
 		else
-			frame:SetAttribute("type", "spell")
-			frame:SetAttribute("spell", spellName)
+			frame:SetAttribute("type1", "spell")
+			frame:SetAttribute("spell1", def.clickSpell or info.spellId)
 		end
 		if def.shiftSpell then
-			frame:SetAttribute("type-shift", "spell")
-			frame:SetAttribute("spell-shift", GetSpellInfo(def.shiftSpell))
+			frame:SetAttribute("shift-type1", "spell")
+			frame:SetAttribute("shift-spell1", def.shiftSpell)
 		end
 	end)
 end
 
 function P:Rescan()
-	local known = scanKnownSpells()
-	local levels = scanSkillLevels()
-
-	for skillLineId, def in pairs(PROFESSIONS) do
-		local spellId = def.single and (known[def.single] and def.single or nil)
-			or highestKnownRank(known, def.ranks or {})
+	self.suppressUntil = GetTime() + 1
+	local known = knownSpells()
+	local levels = skillLevels()
+	for position, skillLineId in ipairs(DISPLAY_ORDER) do
+		local def = PROFESSIONS[skillLineId]
+		local spellId = def.single and (known[def.single] and def.single) or (def.ranks and highestKnown(known, def.ranks))
 		if spellId then
-			state[skillLineId] = state[skillLineId] or {}
-			state[skillLineId].spellId = spellId
+			local info = state[skillLineId] or {}
+			state[skillLineId] = info
+			info.spellId = spellId
 			if levels and levels[skillLineId] then
-				state[skillLineId].rank = levels[skillLineId].rank
-				state[skillLineId].maxRank = levels[skillLineId].maxRank
-				state[skillLineId].modifier = levels[skillLineId].modifier
+				info.rank, info.maxRank, info.modifier = levels[skillLineId].rank, levels[skillLineId].maxRank, levels[skillLineId].modifier
 			end
-			local id = self:AddElement(skillLineId, { defaultPlacement = { bar = false, zone = "LEFT", order = 40 } })
-			self:ApplyAttributes(id, skillLineId, def)
-			self:Refresh(id)
+			local el = self:AddElement(skillLineId, {
+				title = displayName(skillLineId),
+				defaultPlacement = { bar = true, zone = "LEFT", order = 20 + position },
+			})
+			self:ApplyAttributes(el, skillLineId)
+			self:Refresh(el)
+		elseif self._elements[self:ElementId(skillLineId)] then
+			self:RemoveElement(skillLineId) -- profesión olvidada
+			state[skillLineId] = nil
 		end
 	end
 end
 
 function P:OnEnable() self:Rescan() end
-function P:OnEvent() self:Rescan() end
+
+-- Expandir/plegar cabeceras dispara SKILL_LINES_CHANGED: se ignora el eco de nuestro propio
+-- escaneo y se agrupan las ráfagas en un solo reescaneo.
+function P:OnEvent(event)
+	if event == "SKILL_LINES_CHANGED" and self.suppressUntil and GetTime() < self.suppressUntil then return end
+	WCDPanel:StartTicker("professions:rescan", 0.5, function()
+		WCDPanel:StopTicker("professions:rescan")
+		if P.enabled then P:Rescan() end
+	end)
+end
 
 function P:GetText(el)
 	local skillLineId = WCDPanel.elements[el].subId
 	local def, info = PROFESSIONS[skillLineId], state[skillLineId]
 	if not info then return "", "" end
-	local label = GetSpellInfo(info.spellId) or "?"
-	local value = ""
-	if not def.single and info.rank and info.maxRank then
-		value = info.rank .. "/" .. info.maxRank
-		if info.modifier and info.modifier > 0 then
-			value = value .. " (+" .. info.modifier .. ")"
-		end
-	end
+	local label = displayName(skillLineId)
+	if def.single or not info.rank or not info.maxRank then return label, "" end
+	local value = WCDPanel.Util.Color(info.rank, WCDPanel.Util.RatioColor(info.rank / math.max(info.maxRank, 1)))
+		.. WCDPanel.Util.Gray("/" .. info.maxRank)
+	if info.modifier and info.modifier > 0 then value = value .. WCDPanel.Util.Green(" +" .. info.modifier) end
 	return label, value
 end
 
@@ -178,14 +177,20 @@ function P:OnTooltip(el, tooltip)
 	local skillLineId = WCDPanel.elements[el].subId
 	local def, info = PROFESSIONS[skillLineId], state[skillLineId]
 	if not info then return end
-	tooltip:SetText(GetSpellInfo(info.spellId) or "Profesión")
+	tooltip:SetText(displayName(skillLineId))
 	if not def.single and info.rank and info.maxRank then
-		tooltip:AddLine(info.rank .. " / " .. info.maxRank)
+		tooltip:AddLine(format("Nivel %d / %d", info.rank, info.maxRank), 1, 1, 1)
+		if info.modifier and info.modifier > 0 then tooltip:AddLine(format("Bonificación: +%d", info.modifier), 0.1, 1, 0.1) end
 		if info.maxRank < 450 and info.rank >= info.maxRank - 25 then
-			tooltip:AddLine("Busca un instructor para seguir progresando")
+			tooltip:AddLine("Cerca del máximo: busca un instructor para el siguiente rango.", 1, 0.6, 0)
 		end
 	end
+	if def.noClick then
+		tooltip:AddLine("Esta profesión no tiene ventana propia.", 0.6, 0.6, 0.6)
+	else
+		tooltip:AddLine("Clic: " .. (GetSpellInfo(def.clickSpell or info.spellId) or "abrir"), 0.6, 0.6, 0.6)
+	end
 	if def.shiftSpell then
-		tooltip:AddLine("Mayús+clic: " .. (GetSpellInfo(def.shiftSpell) or ""))
+		tooltip:AddLine("Mayús+clic: " .. (GetSpellInfo(def.shiftSpell) or ""), 0.6, 0.6, 0.6)
 	end
 end

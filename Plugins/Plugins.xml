@@ -1,9 +1,20 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
+	<!-- Cada plugin añade aquí su <Script file="Nombre\Nombre.lua"/>. -->
+	<Script file="Coords\Coords.lua"/>
+	<Script file="Bag\Bag.lua"/>
+	<Script file="Repair\Repair.lua"/>
+	<Script file="Quests\Quests.lua"/>
+	<Script file="Gold\Gold.lua"/>
+	<Script file="LootType\LootType.lua"/>
+	<Script file="RestXP\RestXP.lua"/>
+	<Script file="Guild\Guild.lua"/>
+	<Script file="Performance\Performance.lua"/>
+	<Script file="Professions\Professions.lua"/>
+	<Script file="Clock\Clock.lua"/>
+	<Script file="Volume\Volume.lua"/>
+	<Script file="Mail\Mail.lua"/>
 	<Script file="AutoHide\AutoHide.lua"/>
 	<Script file="LDB\LDB.lua"/>
 	<Script file="MinimapButtons\MinimapButtons.lua"/>
-	<Script file="Professions\Professions.lua"/>
-	<Script file="_Test\_Test.lua"/>
-	<!-- Cada plugin nuevo añade aquí su <Script file="NombrePlugin\NombrePlugin.lua"/>. -->
 </Ui>

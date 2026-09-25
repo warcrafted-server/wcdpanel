@@ -15,29 +15,23 @@ frame:SetScript("OnEvent", function(self, event, addonName)
 	end
 end)
 
--- Reconstruye barras y elementos desde cero contra el perfil activo: se llama al entrar y
--- cada vez que AceDB cambia de perfil (copia, reinicio o elegir otro).
+-- Un perfil nuevo arranca con una barra arriba: los plugins colocan sus elementos en ella
+-- (defaultPlacement.bar = true) y así el addon se ve funcionando desde el primer inicio.
+function WCDPanel:EnsureDefaultLayout()
+	if self.db.profile.initialized then return end
+	self.db.profile.initialized = true
+	if next(self.db.profile.bars) == nil then
+		self:CreateBar({ edge = "TOP" })
+	end
+end
+
 function WCDPanel:ReloadProfile()
-	for _, runtime in pairs(self.bars) do
-		runtime.frame:Hide()
-	end
-	wipe(self.bars)
-
-	for _, runtime in pairs(self.elements) do
-		runtime.frame:Hide()
-		runtime.frame:SetParent(nil)
-	end
-	wipe(self.elements)
-
-	for _, plugin in pairs(self.plugins) do
-		plugin.enabled = false
-		plugin._elements = {}
-		if plugin._eventFrame then plugin._eventFrame:SetScript("OnEvent", nil) end
-	end
-
+	self:DeactivatePlugins()
+	for id in pairs(self.bars) do self:DestroyBarFrame(id) end
+	self:EnsureDefaultLayout()
 	self:ActivateBars()
 	self:ActivatePlugins()
-	if self.ScreenAdjustAll then self:ScreenAdjustAll() end
+	self:ScreenAdjustAll()
 end
 
 function WCDPanel:OnLogin()
@@ -45,6 +39,7 @@ function WCDPanel:OnLogin()
 	self.db.RegisterCallback(self, "OnProfileCopied", "ReloadProfile")
 	self.db.RegisterCallback(self, "OnProfileReset", "ReloadProfile")
 
+	self:EnsureDefaultLayout()
 	self:ActivateBars()
 	self:ActivatePlugins()
 	self:InitOptions()
@@ -55,43 +50,33 @@ function WCDPanel:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cff33aaffwcdpanel|r: " .. tostring(msg))
 end
 
--- Comandos de prueba de la fase 1: crear/borrar barras y colocar elementos a mano.
--- Las opciones completas (AceConfig) llegan en la fase 2 y sustituirán esto.
-local function handleSlash(msg)
-	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
-	cmd = (cmd or ""):lower()
+function WCDPanel:SetLocked(locked)
+	self.db.profile.general.locked = locked and true or false
+	self:Print(locked and "barras bloqueadas" or "barras desbloqueadas: arrastra los elementos para moverlos")
+end
 
-	if cmd == "bar" then
+local function handleSlash(msg)
+	local cmd, rest = (msg or ""):match("^(%S*)%s*(.-)$")
+	cmd = (cmd or ""):lower()
+	if cmd == "" or cmd == "config" then
+		WCDPanel:OpenOptions()
+	elseif cmd == "lock" then
+		WCDPanel:SetLocked(not WCDPanel.db.profile.general.locked)
+	elseif cmd == "bar" then
 		local sub, arg = rest:match("^(%S*)%s*(.-)$")
 		if sub == "add" then
 			local edge = (arg ~= "" and arg or "top"):upper()
 			local id = WCDPanel:CreateBar({ edge = edge })
-			WCDPanel:Print("Barra " .. id .. " creada (" .. edge .. ").")
-		elseif sub == "del" then
-			local id = tonumber(arg)
-			if id then
-				WCDPanel:DeleteBar(id)
-				WCDPanel:Print("Barra " .. id .. " borrada.")
-			end
-		elseif sub == "list" then
+			WCDPanel:Print("barra " .. id .. " creada (" .. edge .. ")")
+		elseif sub == "del" and tonumber(arg) then
+			WCDPanel:DeleteBar(tonumber(arg))
+		else
 			for id, cfg in pairs(WCDPanel.db.profile.bars) do
-				WCDPanel:Print(id .. ": " .. cfg.edge .. " stack=" .. cfg.stack ..
-					(cfg.enabled and "" or " (oculta)"))
+				WCDPanel:Print(id .. ": " .. cfg.name .. " (" .. cfg.edge .. ")")
 			end
-		else
-			WCDPanel:Print("uso: /wcd bar add [top|bottom|free] | del <id> | list")
 		end
-	elseif cmd == "put" then
-		local elId, barId, zone, order = rest:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
-		if elId then
-			WCDPanel:PlaceElement(elId, tonumber(barId), zone:upper(), tonumber(order) or 1)
-		else
-			WCDPanel:Print("uso: /wcd put <elemento> <barra> <left|center|right> <orden>")
-		end
-	elseif cmd == "" then
-		WCDPanel:OpenOptions()
 	else
-		WCDPanel:Print("uso: /wcd (abre las opciones) | bar add|del|list | put <elemento> <barra> <left|center|right> <orden>")
+		WCDPanel:Print("/wcd abre las opciones · /wcd lock bloquea o desbloquea · /wcd bar add top|bottom|free · /wcd bar del <n>")
 	end
 end
 

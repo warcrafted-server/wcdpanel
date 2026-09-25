@@ -12,6 +12,7 @@ Locales\enUS.lua
 Locales\esES.lua
 
 Core\Core.lua
+Core\Util.lua
 Core\DB.lua
 Core\Combat.lua
 Core\Scheduler.lua
