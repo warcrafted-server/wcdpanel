@@ -5,6 +5,9 @@
 WCDPanel.bars = WCDPanel.bars or {}
 
 local BG_TEXTURE = "Interface\\ChatFrame\\ChatFrameBackground"
+local BORDER_TEXTURE = "Interface\\Tooltips\\UI-Tooltip-Border"
+local BORDER_COLOR = { 0.55, 0.55, 0.6, 0.8 }
+local SHINE_COLOR = { 1, 1, 1, 0.08 }
 local CONCEALED_ALPHA = 0.1
 local CONCEAL_DELAY = 0.6
 
@@ -149,7 +152,8 @@ function WCDPanel:ApplyBarAppearance(id)
 	local frame = runtime.frame
 	frame:SetScale(cfg.scale)
 	frame:SetFrameStrata(cfg.strata)
-	frame.bg:SetVertexColor(cfg.bg.r, cfg.bg.g, cfg.bg.b, cfg.bg.a)
+	frame:SetBackdropColor(cfg.bg.r, cfg.bg.g, cfg.bg.b, cfg.bg.a)
+	frame:SetBackdropBorderColor(unpack(BORDER_COLOR))
 	updateAlpha(id)
 end
 
@@ -158,9 +162,19 @@ local function createBarFrame(id)
 	frame.barId = id
 	frame:EnableMouse(true)
 	frame:SetClampedToScreen(true)
-	frame.bg = frame:CreateTexture(nil, "BACKGROUND")
-	frame.bg:SetTexture(BG_TEXTURE)
-	frame.bg:SetAllPoints(frame)
+	frame:SetBackdrop({
+		bgFile = BG_TEXTURE, edgeFile = BORDER_TEXTURE, tile = true, tileSize = 16, edgeSize = 10,
+		insets = { left = 2, right = 2, top = 2, bottom = 2 },
+	})
+
+	-- Franja superior más clara: le da algo de volumen sin depender de más texturas.
+	frame.shine = frame:CreateTexture(nil, "ARTWORK")
+	frame.shine:SetTexture(BG_TEXTURE)
+	frame.shine:SetVertexColor(unpack(SHINE_COLOR))
+	frame.shine:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+	frame.shine:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
+	frame.shine:SetHeight(1)
+
 	frame:SetScript("OnMouseUp", function(self, button)
 		if button == "RightButton" then WCDPanel:ShowBarMenu(id, self) end
 	end)

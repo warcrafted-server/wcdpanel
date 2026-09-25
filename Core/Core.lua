@@ -28,6 +28,7 @@ end
 function WCDPanel:ReloadProfile()
 	self:DeactivatePlugins()
 	for id in pairs(self.bars) do self:DestroyBarFrame(id) end
+	self:PatchProfile()
 	self:EnsureDefaultLayout()
 	self:ActivateBars()
 	self:ActivatePlugins()

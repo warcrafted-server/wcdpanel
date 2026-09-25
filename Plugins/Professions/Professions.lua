@@ -133,7 +133,8 @@ function P:Rescan()
 			end
 			local el = self:AddElement(skillLineId, {
 				title = displayName(skillLineId),
-				defaultPlacement = { bar = true, zone = "LEFT", order = 20 + position },
+				defaultPlacement = { bar = true, zone = "LEFT", order = 20 + position,
+					showLabel = false, showText = false },
 			})
 			self:ApplyAttributes(el, skillLineId)
 			self:Refresh(el)

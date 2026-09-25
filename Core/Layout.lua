@@ -32,21 +32,29 @@ local function collectZones(self, barId)
 	return zones
 end
 
-local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, startOffset, relPointForBar)
+-- Sin texto que leer, dos iconos consecutivos se juntan más (iconGap) que un icono y una
+-- etiqueta (spacing), para aprovechar el hueco que libera el minimapa.
+local function isIconOnly(runtime, iconSize)
+	return runtime.frame:GetWidth() <= iconSize + 1
+end
+
+local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, iconGap, iconSize, startOffset, relPointForBar)
 	local cursor = startOffset
-	local prevFrame
+	local prevFrame, prevIconOnly
 	for _, item in ipairs(list) do
 		local runtime = self.elements[item.id]
 		local frame = runtime.frame
+		local iconOnly = isIconOnly(runtime, iconSize)
+		local gap = (prevIconOnly and iconOnly) and iconGap or spacing
 		frame:ClearAllPoints()
 		if prevFrame and not runtime.secure then
-			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * spacing, 0)
+			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * gap, 0)
 		else
 			frame:SetPoint(anchorPoint, bar, relPointForBar, sign * cursor, 0)
 		end
 		frame:Show()
-		cursor = cursor + frame:GetWidth() + spacing
-		prevFrame = frame
+		cursor = cursor + frame:GetWidth() + gap
+		prevFrame, prevIconOnly = frame, iconOnly
 	end
 end
 
@@ -54,20 +62,21 @@ function WCDPanel:Reflow(barId)
 	local barRuntime = self.bars[barId]
 	if not barRuntime then return end
 
-	local spacing = self.db.profile.general.spacing
+	local general = self.db.profile.general
+	local spacing, iconGap, iconSize = general.spacing, general.iconGap, general.iconSize
 	local zones = collectZones(self, barId)
 	local bar = barRuntime.frame
 	local edgeGap = math.floor(spacing / 2)
 
-	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, edgeGap, "LEFT")
-	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, edgeGap, "RIGHT")
+	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, iconGap, iconSize, edgeGap, "LEFT")
+	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, iconGap, iconSize, edgeGap, "RIGHT")
 
 	local total = 0
 	for i, item in ipairs(zones.CENTER) do
 		total = total + self.elements[item.id].frame:GetWidth()
 		if i > 1 then total = total + spacing end
 	end
-	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, -total / 2, "CENTER")
+	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, iconGap, iconSize, -total / 2, "CENTER")
 end
 
 function WCDPanel:ReflowAll()

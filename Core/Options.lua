@@ -214,6 +214,12 @@ local function buildOptions()
 						get = function() return general.spacing end,
 						set = function(_, v) general.spacing = v WCDPanel:ReflowAll() end,
 					},
+					iconGap = {
+						type = "range", order = 2.5, name = "Separación entre iconos", min = 0, max = 20, step = 1,
+						desc = "Distancia entre dos iconos consecutivos sin etiqueta (LDB, minimapa, volumen...).",
+						get = function() return general.iconGap end,
+						set = function(_, v) general.iconGap = v WCDPanel:ReflowAll() end,
+					},
 					iconSize = {
 						type = "range", order = 3, name = "Tamaño de icono", min = 10, max = 28, step = 1,
 						get = function() return general.iconSize end,
