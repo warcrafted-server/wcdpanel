@@ -5,15 +5,21 @@
 -- recuerda la base y el valor que aplicamos. Si al volver el frame sigue en nuestro valor, la base
 -- es la de antes; si no, alguien lo ha recolocado y su posición actual es la nueva base.
 -- Los frames que el jugador ha movido a mano (IsUserPlaced) no se tocan.
+-- BuffFrame y TemporaryEnchantFrame no van en la lista: se anclan a ConsolidatedBuffs y ya bajan
+-- con él.
 
 local TOP_FRAMES = {
 	"PlayerFrame", "TargetFrame", "FocusFrame", "PartyMemberFrame1", "MinimapCluster",
-	"BuffFrame", "TemporaryEnchantFrame", "ConsolidatedBuffs", "TicketStatusFrame",
+	"ConsolidatedBuffs", "TicketStatusFrame",
 	"WorldStateAlwaysUpFrame",
 }
 local BOTTOM_FRAMES = { "MainMenuBar", "MultiBarRight", "VehicleMenuBar", "ChatFrame1", "ChatFrame2" }
 
 local tracked = {}
+
+-- GetPoint no devuelve exactamente lo que se pasó a SetPoint (-21.99998 en vez de -22): comparar
+-- con == hacía que cada recolocación de Blizzard bajase el frame otra vez.
+local TOLERANCE = 0.5
 
 local function adjustFrame(self, name, offset, sign)
 	local frame = _G[name]
@@ -25,10 +31,10 @@ local function adjustFrame(self, name, offset, sign)
 
 	local state = tracked[name]
 	local base = y
-	if state and state.point == point and state.applied == y then base = state.base end
+	if state and state.point == point and math.abs(state.applied - y) < TOLERANCE then base = state.base end
 	local target = base + sign * offset
 	tracked[name] = { point = point, base = base, applied = target }
-	if target ~= y then
+	if math.abs(target - y) >= TOLERANCE then
 		frame:ClearAllPoints()
 		frame:SetPoint(point, relTo or UIParent, relPoint, x, target)
 	end
