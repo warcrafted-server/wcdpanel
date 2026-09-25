@@ -1,13 +1,108 @@
--- Coloca los elementos de una barra en sus 3 zonas mediante anclaje encadenado: cada
--- elemento se ancla al anterior, así un cambio de ancho solo desplaza a los siguientes.
+-- Orden y colocación de los elementos, con el mismo patrón que TitanPanel: cada zona de cada barra
+-- guarda una lista ordenada de ids (profile.bars[n].layout.LEFT/CENTER/RIGHT) y el orden es la
+-- posición en esa lista. No hay números de orden sueltos que puedan empatar o quedar intercalados
+-- al añadir un plugin nuevo o al arrastrar.
 --
--- Los botones seguros (profesiones) también van encadenados: anclarlos a una distancia fija de la
--- barra obligaba a que esa cuenta cuadrara siempre con la cadena real, y en el cliente no lo hacía
--- (se montaban encima de los anteriores). A cambio, todo lo que tienen delante en la cadena queda
--- protegido en combate, así que cualquier cambio de tamaño se aplaza (mutate en Element.lua) y el
--- reflow entero va fuera de combate.
+-- LEFT y CENTER van de izquierda a derecha; RIGHT, de derecha a izquierda (el 1 es el más pegado
+-- al borde derecho). Cada elemento se ancla al anterior de su lista y el primero al borde de la
+-- barra. Los botones seguros (profesiones) van en la cadena igual que el resto: eso deja protegida
+-- en combate la cadena que tienen delante, así que todo cambio de tamaño se aplaza (mutate en
+-- Element.lua) y el reflow entero va fuera de combate.
+--
+-- cfg.bar y cfg.zone del elemento son un reflejo de la lista donde está; solo los cambian
+-- InsertInZone/RemoveFromZones. cfg.defaultOrder (el order del defaultPlacement del plugin) solo
+-- sirve para decidir dónde entra un elemento nuevo en su lista.
 
-WCDPanel.LAYOUT_REV = 2 -- 2: todo encadenado (también los botones seguros)
+WCDPanel.LAYOUT_REV = 3
+
+local ZONES = { "LEFT", "CENTER", "RIGHT" }
+
+function WCDPanel:ZoneList(barId, zone)
+	local barCfg = self.db.profile.bars[barId]
+	if not barCfg then return nil end
+	barCfg.layout = barCfg.layout or {}
+	barCfg.layout[zone] = barCfg.layout[zone] or {}
+	return barCfg.layout[zone]
+end
+
+-- Barra, zona y posición de un elemento según las listas (no según cfg).
+function WCDPanel:FindInZones(id)
+	for barId, barCfg in pairs(self.db.profile.bars) do
+		for _, zone in ipairs(ZONES) do
+			local list = barCfg.layout and barCfg.layout[zone]
+			if list then
+				for i, other in ipairs(list) do
+					if other == id then return barId, zone, i end
+				end
+			end
+		end
+	end
+end
+
+function WCDPanel:RemoveFromZones(id)
+	for _, barCfg in pairs(self.db.profile.bars) do
+		for _, zone in ipairs(ZONES) do
+			local list = barCfg.layout and barCfg.layout[zone]
+			if list then
+				for i = #list, 1, -1 do
+					if list[i] == id then table.remove(list, i) end
+				end
+			end
+		end
+	end
+end
+
+-- Mete un elemento en una zona. index nil: donde le toque por su defaultOrder entre los que ya
+-- hay (así un plugin nuevo aparece en su sitio lógico y no al final de todo).
+function WCDPanel:InsertInZone(id, barId, zone, index)
+	self:RemoveFromZones(id)
+	local cfg = self.db.profile.elements[id]
+	local list = self:ZoneList(barId, zone)
+	if not list then return end
+	if not index then
+		local mine = cfg and cfg.defaultOrder or math.huge
+		index = #list + 1
+		for i, other in ipairs(list) do
+			local otherCfg = self.db.profile.elements[other]
+			if (otherCfg and otherCfg.defaultOrder or math.huge) > mine then
+				index = i
+				break
+			end
+		end
+	end
+	index = math.max(1, math.min(index, #list + 1))
+	table.insert(list, index, id)
+	if cfg then cfg.bar, cfg.zone = barId, zone end
+end
+
+-- Perfiles de antes de las listas: se construyen una vez a partir de cfg.order, y cfg.order pasa
+-- a ser el defaultOrder. También repara un elemento con barra en cfg que no esté en ninguna lista.
+function WCDPanel:EnsureZoneLists()
+	local elements = self.db.profile.elements
+	local pending = {}
+	for id, cfg in pairs(elements) do
+		if cfg.order ~= nil then
+			cfg.defaultOrder = cfg.defaultOrder or cfg.order
+			cfg.order = nil
+			if cfg.bar and self.db.profile.bars[cfg.bar] then
+				table.insert(pending, { id = id, cfg = cfg })
+			end
+		end
+	end
+	table.sort(pending, function(a, b)
+		if a.cfg.defaultOrder ~= b.cfg.defaultOrder then return a.cfg.defaultOrder < b.cfg.defaultOrder end
+		return a.id < b.id
+	end)
+	for _, item in ipairs(pending) do
+		if not self:FindInZones(item.id) then
+			table.insert(self:ZoneList(item.cfg.bar, item.cfg.zone or "LEFT"), item.id)
+		end
+	end
+	for id, cfg in pairs(elements) do
+		if cfg.bar and not self.db.profile.bars[cfg.bar] then cfg.bar = false end
+		if cfg.bar and not self:FindInZones(id) then self:InsertInZone(id, cfg.bar, cfg.zone or "LEFT") end
+	end
+end
 
 function WCDPanel:LayoutMarkDirty(barId)
 	if not barId then return end
@@ -16,71 +111,77 @@ function WCDPanel:LayoutMarkDirty(barId)
 	end)
 end
 
--- Solo elementos vivos: un plugin desactivado conserva su configuración (bar = X) pero ya no
--- tiene frame.
-local function collectZones(self, barId)
-	local zones = { LEFT = {}, CENTER = {}, RIGHT = {} }
-	for id, cfg in pairs(self.db.profile.elements) do
-		if cfg.bar == barId and self.elements[id] then
-			local list = zones[cfg.zone] or zones.LEFT
-			table.insert(list, { id = id, order = cfg.order or 1 })
-		end
-	end
-	for _, list in pairs(zones) do
-		table.sort(list, function(a, b)
-			if a.order ~= b.order then return a.order < b.order end
-			return a.id < b.id
-		end)
-	end
-	return zones
-end
-
 -- Sin texto que leer, dos iconos consecutivos se juntan más (iconGap) que un icono y una
 -- etiqueta (spacing), para aprovechar el hueco que libera el minimapa.
 local function isIconOnly(runtime)
 	return runtime.foreign or not (runtime.frame.text and runtime.frame.text:IsShown())
 end
 
-local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, iconGap, startOffset, relPointForBar)
-	local cursor = startOffset
-	local prevFrame, prevIconOnly
-	for _, item in ipairs(list) do
-		local runtime = self.elements[item.id]
+local reported = {}
+local function anchor(self, id, frame, ...)
+	frame:ClearAllPoints()
+	local ok, err = pcall(frame.SetPoint, frame, ...)
+	if not ok and not reported[id] then
+		reported[id] = true
+		self:Print("no se pudo colocar " .. id .. ": " .. tostring(err))
+	end
+end
+
+-- Elementos vivos de una zona, en su orden. Los de un plugin desactivado siguen en la lista (al
+-- reactivarlo vuelven a su sitio) pero no tienen frame.
+local function liveItems(self, barId, zone)
+	local items = {}
+	for _, id in ipairs(self:ZoneList(barId, zone)) do
+		local runtime = self.elements[id]
+		if runtime then table.insert(items, runtime) end
+	end
+	return items
+end
+
+local function chain(self, items, bar, zone, spacing, iconGap, startX)
+	local sideAnchor, prevAnchor, sign = "LEFT", "RIGHT", 1
+	if zone == "RIGHT" then sideAnchor, prevAnchor, sign = "RIGHT", "LEFT", -1 end
+	local barPoint = zone == "CENTER" and "CENTER" or sideAnchor
+	local prev, prevIconOnly
+	for _, runtime in ipairs(items) do
 		local frame = runtime.frame
 		local iconOnly = isIconOnly(runtime)
 		local gap = (prevIconOnly and iconOnly) and iconGap or spacing
-		frame:ClearAllPoints()
-		if prevFrame then
-			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * gap, 0)
+		if prev then
+			anchor(self, runtime.id, frame, sideAnchor, prev, prevAnchor, sign * gap, 0)
 		else
-			frame:SetPoint(anchorPoint, bar, relPointForBar, sign * cursor, 0)
+			anchor(self, runtime.id, frame, sideAnchor, bar, barPoint, sign * startX, 0)
 		end
 		frame:Show()
-		self:FitElementWidth(item.id)
-		cursor = cursor + frame:GetWidth() + gap
-		prevFrame, prevIconOnly = frame, iconOnly
+		prev, prevIconOnly = frame, iconOnly
 	end
 end
 
 function WCDPanel:Reflow(barId)
 	local barRuntime = self.bars[barId]
 	if not barRuntime then return end
-
 	local general = self.db.profile.general
 	local spacing, iconGap = general.spacing, general.iconGap
-	local zones = collectZones(self, barId)
 	local bar = barRuntime.frame
 	local edgeGap = math.floor(spacing / 2)
 
-	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, iconGap, edgeGap, "LEFT")
-	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, iconGap, edgeGap, "RIGHT")
-
-	local total = 0
-	for i, item in ipairs(zones.CENTER) do
-		total = total + self.elements[item.id].frame:GetWidth()
-		if i > 1 then total = total + spacing end
+	local zoneItems = {}
+	for _, zone in ipairs(ZONES) do
+		zoneItems[zone] = liveItems(self, barId, zone)
+		for _, runtime in ipairs(zoneItems[zone]) do self:FitElementWidth(runtime.id) end
 	end
-	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, iconGap, -total / 2, "CENTER")
+
+	chain(self, zoneItems.LEFT, bar, "LEFT", spacing, iconGap, edgeGap)
+	chain(self, zoneItems.RIGHT, bar, "RIGHT", spacing, iconGap, edgeGap)
+
+	local total, prevIconOnly = 0, nil
+	for i, runtime in ipairs(zoneItems.CENTER) do
+		local iconOnly = isIconOnly(runtime)
+		if i > 1 then total = total + ((prevIconOnly and iconOnly) and iconGap or spacing) end
+		total = total + runtime.frame:GetWidth()
+		prevIconOnly = iconOnly
+	end
+	chain(self, zoneItems.CENTER, bar, "CENTER", spacing, iconGap, -total / 2)
 end
 
 function WCDPanel:ReflowAll()
@@ -103,8 +204,7 @@ end
 WCDPanel:StartTicker("layout:widths", 2, function() WCDPanel:CheckElementWidths() end)
 
 -- /wcd debug: cómo está colocada de verdad cada barra en el cliente (posición real con GetLeft,
--- ancho, ancho del texto y a qué está anclado), más los elementos hijos de la barra que ningún
--- reflow coloca (restos con un ancla vieja).
+-- ancho, ancho del texto y a qué está anclado).
 local function frameName(f)
 	if not f then return "nil" end
 	if f == UIParent then return "UIParent" end
@@ -113,32 +213,25 @@ local function frameName(f)
 end
 
 function WCDPanel:DebugLayout(all)
-	self:Print(format("diseño rev %d, combate: %s", self.LAYOUT_REV or 0, tostring(InCombatLockdown())))
+	self:Print(format("colocación v%d, combate: %s", self.LAYOUT_REV, tostring(InCombatLockdown())))
 	for barId, barRuntime in pairs(self.bars) do
 		local bar = barRuntime.frame
 		self:Print(format("barra %d: L=%.1f W=%.1f escala=%.2f", barId, bar:GetLeft() or -1, bar:GetWidth() or -1, bar:GetScale()))
-		local listed = {}
-		local zones = collectZones(self, barId)
-		for _, zone in ipairs({ "LEFT", "CENTER", "RIGHT" }) do
-			for _, item in ipairs(zones[zone]) do
-				listed[item.id] = true
-				if all or zone == "LEFT" then
-				local f = self.elements[item.id].frame
-				local point, rel, relPoint, x = f:GetPoint(1)
-				self:Print(format("%s %s %s L=%.1f W=%.1f txt=%.1f ancla=%s:%s%+.1f %s", zone:sub(1, 1),
-					tostring(item.order), item.id, f:GetLeft() or -1, f:GetWidth() or -1,
-					f.text and f.text:IsShown() and f.text:GetStringWidth() or 0,
-					frameName(rel), tostring(relPoint), x or 0, f:IsShown() and "" or "(oculto)"))
+		for _, zone in ipairs(ZONES) do
+			if all or zone == "LEFT" then
+				for i, id in ipairs(self:ZoneList(barId, zone)) do
+					local runtime = self.elements[id]
+					if not runtime then
+						self:Print(format("%s%d %s (plugin desactivado)", zone:sub(1, 1), i, id))
+					else
+						local f = runtime.frame
+						local _, rel, relPoint, x = f:GetPoint(1)
+						self:Print(format("%s%d %s L=%.1f W=%.1f txt=%.1f ancla=%s:%s%+.1f%s", zone:sub(1, 1), i, id,
+							f:GetLeft() or -1, f:GetWidth() or -1,
+							f.text and f.text:IsShown() and f.text:GetStringWidth() or 0,
+							frameName(rel), tostring(relPoint), x or 0, f:IsShown() and "" or " (oculto)"))
+					end
 				end
-			end
-		end
-		for id, runtime in pairs(self.elements) do
-			if not listed[id] and runtime.frame:GetParent() == bar and runtime.frame:IsShown() then
-				local _, rel, _, x = runtime.frame:GetPoint(1)
-				self:Print(format("|cffff4040SIN COLOCAR|r %s L=%.1f ancla=%s%+.1f bar=%s zona=%s", id,
-					runtime.frame:GetLeft() or -1, frameName(rel), x or 0,
-					tostring(self.db.profile.elements[id] and self.db.profile.elements[id].bar),
-					tostring(self.db.profile.elements[id] and self.db.profile.elements[id].zone)))
 			end
 		end
 	end

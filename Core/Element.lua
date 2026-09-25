@@ -21,7 +21,7 @@ local function defaultElementConfig(placement)
 	return {
 		bar = bar or false,
 		zone = placement.zone or "LEFT",
-		order = placement.order or 1,
+		defaultOrder = placement.order or 100,
 		showIcon = true,
 		showLabel = placement.showLabel ~= false,
 		showText = placement.showText ~= false,
@@ -34,7 +34,10 @@ function WCDPanel:EnsureElementConfig(id, defaultPlacement)
 	if not elements[id] then
 		elements[id] = defaultElementConfig(defaultPlacement)
 	end
-	return elements[id]
+	local cfg = elements[id]
+	if cfg.bar and not self.db.profile.bars[cfg.bar] then cfg.bar = false end
+	if cfg.bar and not self:FindInZones(id) then self:InsertInZone(id, cfg.bar, cfg.zone) end
+	return cfg
 end
 
 -- Un elemento seguro, o cualquiera al que se ancle uno (IsProtected lo incluye), no se puede
@@ -191,17 +194,22 @@ function WCDPanel:RefreshElement(id)
 	end)
 end
 
--- Mueve un elemento a otra barra/zona/orden. false en barId = quitarlo de las barras.
--- Único punto de entrada para reasignar: lo usan las opciones, el menú y arrastrar y soltar.
-function WCDPanel:PlaceElement(id, barId, zone, order)
+-- Mueve un elemento a otra barra/zona, en la posición index de su lista (nil: al final). false
+-- en barId = quitarlo de las barras. Único punto de entrada para reasignar: lo usan las
+-- opciones, el menú y arrastrar y soltar.
+function WCDPanel:PlaceElement(id, barId, zone, index)
 	local cfg = self.db.profile.elements[id]
 	local runtime = self.elements[id]
 	if not cfg or not runtime then return end
 
 	local oldBar = cfg.bar
-	cfg.bar = barId or false
-	if zone then cfg.zone = zone end
-	if order then cfg.order = order end
+	if barId then
+		local list = self:ZoneList(barId, zone or cfg.zone)
+		self:InsertInZone(id, barId, zone or cfg.zone, index or (#list + 1))
+	else
+		self:RemoveFromZones(id)
+		cfg.bar = false
+	end
 
 	applyPlacement(self, runtime)
 	if oldBar and oldBar ~= cfg.bar then self:LayoutMarkDirty(oldBar) end

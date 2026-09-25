@@ -44,7 +44,7 @@ function WCDPanel:OnLogin()
 	self:ActivateBars()
 	self:ActivatePlugins()
 	self:InitOptions()
-	self:Print(L["wcdpanel loaded. Type /wcd for options."])
+	self:Print(L["wcdpanel loaded. Type /wcd for options."] .. " (colocación v" .. self.LAYOUT_REV .. ")")
 end
 
 function WCDPanel:Print(msg)

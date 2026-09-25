@@ -243,6 +243,7 @@ function WCDPanel:DeleteBar(id)
 end
 
 function WCDPanel:ActivateBars()
+	self:EnsureZoneLists()
 	for id, cfg in pairs(self.db.profile.bars) do
 		if cfg.enabled then self:ActivateBar(id) end
 	end

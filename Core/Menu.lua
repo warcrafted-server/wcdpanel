@@ -45,7 +45,7 @@ local function moveSubmenu(id)
 			table.insert(zones, {
 				text = ZONE_NAMES[zone], notCheckable = true,
 				func = function()
-					WCDPanel:PlaceElement(id, barId, zone, 999)
+					WCDPanel:PlaceElement(id, barId, zone)
 					CloseDropDownMenus()
 				end,
 			})

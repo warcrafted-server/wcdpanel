@@ -48,38 +48,30 @@ local function zoneAt(barFrame, x)
 	return "CENTER"
 end
 
--- Inserta draggedId en la zona según la x soltada y renumera el orden de toda la zona.
-local function reorderZone(barId, zone, draggedId, cursorX)
-	local list = {}
-	for id, cfg in pairs(WCDPanel.db.profile.elements) do
+-- Posición en la lista de la zona donde cae el elemento soltado: delante del primero (en el orden
+-- de la lista) cuyo centro queda más allá del cursor. En RIGHT la lista va de derecha a izquierda.
+-- Los que no tienen posición en pantalla (plugin desactivado, aún sin colocar) no cuentan.
+local function dropIndex(barId, zone, draggedId, cursorX)
+	WCDPanel:RemoveFromZones(draggedId)
+	local list = WCDPanel:ZoneList(barId, zone)
+	for i, id in ipairs(list) do
 		local runtime = WCDPanel.elements[id]
-		if runtime and cfg.bar == barId and cfg.zone == zone and id ~= draggedId then
-			local left, right = runtime.frame:GetLeft(), runtime.frame:GetRight()
-			local center = left and right and (left + right) / 2 or 0
-			table.insert(list, { id = id, center = center })
+		local left, right = runtime and runtime.frame:GetLeft(), runtime and runtime.frame:GetRight()
+		if left and right then
+			local center = (left + right) / 2
+			if (zone == "RIGHT" and cursorX > center) or (zone ~= "RIGHT" and cursorX < center) then
+				return i
+			end
 		end
 	end
-	table.sort(list, function(a, b) return a.center < b.center end)
-
-	local insertAt = #list + 1
-	for i, item in ipairs(list) do
-		if cursorX < item.center then insertAt = i break end
-	end
-	table.insert(list, insertAt, { id = draggedId })
-
-	-- En RIGHT el orden 1 es el más pegado al borde derecho: se numera de derecha a izquierda.
-	local count = #list
-	for i, item in ipairs(list) do
-		WCDPanel.db.profile.elements[item.id].order = zone == "RIGHT" and (count - i + 1) or i
-	end
+	return #list + 1
 end
 
 function WCDPanel:HandleElementDrop(id)
 	local barId, cursorX = findBarUnderCursor()
 	if not barId then return end -- soltado fuera de toda barra: se queda donde estaba
 	local zone = zoneAt(self.bars[barId].frame, cursorX)
-	reorderZone(barId, zone, id, cursorX)
-	self:PlaceElement(id, barId, zone)
+	self:PlaceElement(id, barId, zone, dropIndex(barId, zone, id, cursorX))
 end
 
 function WCDPanel:AttachElementDrag(id, frame)

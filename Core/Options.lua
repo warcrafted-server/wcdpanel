@@ -127,16 +127,18 @@ local function elementGroup(id, order)
 			bar = {
 				type = "select", order = 1, name = "Barra", values = barChoices(),
 				get = function() return cfg().bar or 0 end,
-				set = function(_, v) WCDPanel:PlaceElement(id, v ~= 0 and v or false, nil, 999) end,
+				set = function(_, v) WCDPanel:PlaceElement(id, v ~= 0 and v or false) end,
 			},
 			zone = {
 				type = "select", order = 2, name = "Zona", values = ZONE_NAMES,
 				get = function() return cfg().zone end,
-				set = function(_, v) WCDPanel:PlaceElement(id, cfg().bar, v, 999) end,
+				set = function(_, v) WCDPanel:PlaceElement(id, cfg().bar, v) end,
 			},
 			order = {
-				type = "range", order = 3, name = "Orden", min = 1, max = 40, step = 1,
-				get = function() return math.min(cfg().order, 40) end,
+				type = "range", order = 3, name = "Posición en la zona", min = 1, max = 40, step = 1,
+				desc = "1 es el más pegado al borde (en la zona derecha, al borde derecho).",
+				disabled = function() return not cfg().bar end,
+				get = function() return select(3, WCDPanel:FindInZones(id)) or 1 end,
 				set = function(_, v) WCDPanel:PlaceElement(id, cfg().bar, nil, v) end,
 			},
 		},
