@@ -76,6 +76,8 @@ local function handleSlash(msg)
 				WCDPanel:Print(id .. ": " .. cfg.name .. " (" .. cfg.edge .. ")")
 			end
 		end
+	elseif cmd == "debug" then
+		WCDPanel:DebugLayout(rest == "all")
 	else
 		WCDPanel:Print("/wcd abre las opciones · /wcd lock bloquea o desbloquea · /wcd bar add top|bottom|free · /wcd bar del <n>")
 	end

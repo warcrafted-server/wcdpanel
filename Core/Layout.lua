@@ -7,6 +7,8 @@
 -- protegido en combate, así que cualquier cambio de tamaño se aplaza (mutate en Element.lua) y el
 -- reflow entero va fuera de combate.
 
+WCDPanel.LAYOUT_REV = 2 -- 2: todo encadenado (también los botones seguros)
+
 function WCDPanel:LayoutMarkDirty(barId)
 	if not barId then return end
 	self:MarkDirty("layout:" .. barId, function()
@@ -99,3 +101,45 @@ function WCDPanel:CheckElementWidths()
 end
 
 WCDPanel:StartTicker("layout:widths", 2, function() WCDPanel:CheckElementWidths() end)
+
+-- /wcd debug: cómo está colocada de verdad cada barra en el cliente (posición real con GetLeft,
+-- ancho, ancho del texto y a qué está anclado), más los elementos hijos de la barra que ningún
+-- reflow coloca (restos con un ancla vieja).
+local function frameName(f)
+	if not f then return "nil" end
+	if f == UIParent then return "UIParent" end
+	local name = f.GetName and f:GetName()
+	return name and name:gsub("^WCDPanel", "") or tostring(f)
+end
+
+function WCDPanel:DebugLayout(all)
+	self:Print(format("diseño rev %d, combate: %s", self.LAYOUT_REV or 0, tostring(InCombatLockdown())))
+	for barId, barRuntime in pairs(self.bars) do
+		local bar = barRuntime.frame
+		self:Print(format("barra %d: L=%.1f W=%.1f escala=%.2f", barId, bar:GetLeft() or -1, bar:GetWidth() or -1, bar:GetScale()))
+		local listed = {}
+		local zones = collectZones(self, barId)
+		for _, zone in ipairs({ "LEFT", "CENTER", "RIGHT" }) do
+			for _, item in ipairs(zones[zone]) do
+				listed[item.id] = true
+				if all or zone == "LEFT" then
+				local f = self.elements[item.id].frame
+				local point, rel, relPoint, x = f:GetPoint(1)
+				self:Print(format("%s %s %s L=%.1f W=%.1f txt=%.1f ancla=%s:%s%+.1f %s", zone:sub(1, 1),
+					tostring(item.order), item.id, f:GetLeft() or -1, f:GetWidth() or -1,
+					f.text and f.text:IsShown() and f.text:GetStringWidth() or 0,
+					frameName(rel), tostring(relPoint), x or 0, f:IsShown() and "" or "(oculto)"))
+				end
+			end
+		end
+		for id, runtime in pairs(self.elements) do
+			if not listed[id] and runtime.frame:GetParent() == bar and runtime.frame:IsShown() then
+				local _, rel, _, x = runtime.frame:GetPoint(1)
+				self:Print(format("|cffff4040SIN COLOCAR|r %s L=%.1f ancla=%s%+.1f bar=%s zona=%s", id,
+					runtime.frame:GetLeft() or -1, frameName(rel), x or 0,
+					tostring(self.db.profile.elements[id] and self.db.profile.elements[id].bar),
+					tostring(self.db.profile.elements[id] and self.db.profile.elements[id].zone)))
+			end
+		end
+	end
+end
