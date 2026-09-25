@@ -190,12 +190,13 @@ function P:OnEnable()
 		if _G[name] then self:Collect(name) end
 	end
 	self:Scan()
-	-- Muchos addons crean su botón un poco después de entrar en el mundo.
+	-- Algunos addons (HealBot entre ellos) crean su botón varios segundos después de entrar
+	-- en el mundo, o lo recrean tras su propia inicialización tardía.
 	local tries = 0
 	WCDPanel:StartTicker("minimapbuttons", 3, function()
 		tries = tries + 1
 		P:Scan()
-		if tries >= 4 then WCDPanel:StopTicker("minimapbuttons") end
+		if tries >= 15 then WCDPanel:StopTicker("minimapbuttons") end
 	end)
 end
 

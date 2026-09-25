@@ -54,7 +54,11 @@ function P:OnEvent(event, message)
 	self:Refresh()
 end
 
-function P:GetText() return "", "" end
+function P:GetText()
+	if not HasNewMail() then return "", "" end
+	local n = GetInboxNumItems()
+	return "", n > 0 and tostring(n) or ""
+end
 
 function P:GetIcon()
 	if HasNewMail() then return ICON end
