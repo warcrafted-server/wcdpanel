@@ -5,7 +5,8 @@
 --   * normal: Button nuestro con icono + texto;
 --   * seguro (plugin.opts.secure): igual pero con SecureActionButtonTemplate. Su OnClick es el
 --     de Blizzard (lanza el hechizo), así que el nuestro va con HookScript, nunca SetScript; y
---     todo lo que lo mueve/oculta/reemparenta pasa por RunOutOfCombat;
+--     todo lo que lo mueve/oculta/reemparenta pasa por RunOutOfCombat (también en los elementos
+--     a los que queda anclado: ver mutate);
 --   * contenedor (info.foreign): Frame vacío del tamaño de un icono donde un plugin mete el
 --     botón de otro addon (ver Plugins/MinimapButtons).
 
@@ -36,8 +37,10 @@ function WCDPanel:EnsureElementConfig(id, defaultPlacement)
 	return elements[id]
 end
 
+-- Un elemento seguro, o cualquiera al que se ancle uno (IsProtected lo incluye), no se puede
+-- redimensionar ni mover en combate: se aplaza.
 local function mutate(runtime, key, fn)
-	if runtime.secure then
+	if runtime.secure or runtime.frame:IsProtected() then
 		WCDPanel:RunOutOfCombat("el:" .. runtime.id .. ":" .. key, fn)
 	else
 		fn()
@@ -270,8 +273,11 @@ function WCDPanel:FitElementWidth(id)
 	local width = 0
 	if showIcon then width = general.iconSize end
 	if hasText then
+		local textWidth = frame.text:GetStringWidth() or 0
+		-- Aún sin maquetar: mejor no tocar nada que encoger el elemento al ancho del icono.
+		if textWidth <= 0 and frame:GetWidth() > 0 then return false end
 		if showIcon then width = width + ICON_LABEL_GAP end
-		width = width + (frame.text:GetStringWidth() or 0)
+		width = width + textWidth
 	end
 	width = math.max(math.floor(width + 0.5), general.iconSize)
 	if math.abs(frame:GetWidth() - width) < 0.5 then return false end

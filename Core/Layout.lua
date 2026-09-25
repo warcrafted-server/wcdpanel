@@ -1,10 +1,11 @@
 -- Coloca los elementos de una barra en sus 3 zonas mediante anclaje encadenado: cada
 -- elemento se ancla al anterior, así un cambio de ancho solo desplaza a los siguientes.
 --
--- Los elementos seguros (plugin.opts.secure) son la excepción: se anclan a la propia barra
--- con un offset absoluto en vez de al elemento anterior, para no depender de un frame
--- protegido ni obligar a moverlo cuando cambia un vecino (ver Core/Combat.lua).
--- Todo el reflow se aplaza fuera de combate: una barra con botones seguros queda protegida.
+-- Los botones seguros (profesiones) también van encadenados: anclarlos a una distancia fija de la
+-- barra obligaba a que esa cuenta cuadrara siempre con la cadena real, y en el cliente no lo hacía
+-- (se montaban encima de los anteriores). A cambio, todo lo que tienen delante en la cadena queda
+-- protegido en combate, así que cualquier cambio de tamaño se aplaza (mutate en Element.lua) y el
+-- reflow entero va fuera de combate.
 
 function WCDPanel:LayoutMarkDirty(barId)
 	if not barId then return end
@@ -47,7 +48,7 @@ local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, ico
 		local iconOnly = isIconOnly(runtime)
 		local gap = (prevIconOnly and iconOnly) and iconGap or spacing
 		frame:ClearAllPoints()
-		if prevFrame and not runtime.secure then
+		if prevFrame then
 			frame:SetPoint(anchorPoint, prevFrame, growPoint, sign * gap, 0)
 		else
 			frame:SetPoint(anchorPoint, bar, relPointForBar, sign * cursor, 0)

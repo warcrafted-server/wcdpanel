@@ -150,8 +150,11 @@ function WCDPanel:ApplyBarAppearance(id)
 	local cfg, runtime = self.db.profile.bars[id], self.bars[id]
 	if not cfg or not runtime then return end
 	local frame = runtime.frame
-	frame:SetScale(cfg.scale)
-	frame:SetFrameStrata(cfg.strata)
+	-- Con botones seguros anclados, la barra queda protegida en combate.
+	self:RunOutOfCombat("barlook:" .. id, function()
+		frame:SetScale(cfg.scale)
+		frame:SetFrameStrata(cfg.strata)
+	end)
 	frame:SetBackdropColor(cfg.bg.r, cfg.bg.g, cfg.bg.b, cfg.bg.a)
 	frame:SetBackdropBorderColor(unpack(BORDER_COLOR))
 	updateAlpha(id)
