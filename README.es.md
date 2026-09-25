@@ -24,7 +24,8 @@ selección de personaje.
 Al entrar por primera vez con un personaje aparece ya una barra arriba, con esta disposición:
 
 - **Izquierda**: localización, bolsas, durabilidad, misiones, oro, tipo de saqueo, XP descansada,
-  hermandad, rendimiento y un icono por cada profesión que tengas aprendida.
+  tiempo estimado para subir de nivel, hermandad, rendimiento y un icono por cada profesión que
+  tengas aprendida.
 - **Derecha**: reloj, volumen, correo, el botón para autoocultar la barra y, detrás, los iconos de
   tus propios addons (los que usan LibDataBroker y los que ponen un botón suelto en el minimapa).
 

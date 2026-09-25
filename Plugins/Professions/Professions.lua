@@ -7,21 +7,39 @@
 -- queda libre para el menú. spell lleva el ID: SecureActionButton_OnClick usa CastSpellByID.
 --
 -- IDs verificados en SkillLine.dbc/Spell.dbc (base y esES) del propio servidor.
+-- "ranks" solo sirve para encontrar el hechizo exacto a lanzar/mostrar en el libro de hechizos
+-- del jugador (rango más alto conocido); pero Herboristería y Desollar no aparecen ahí (solo
+-- "Buscar hierbas" lo hace, y Desollar no tiene ningún hechizo). "icon" es el respaldo para esos
+-- casos y para cuando el rango exacto no aparece en el libro por lo que sea: un icono fijo de la
+-- propia profesión, no uno de su hechizo.
 local PROFESSIONS = {
-	[171] = { names = { enUS = "Alchemy", esES = "Alquimia" }, ranks = { 2259, 3101, 3464, 11611, 28596, 51304 } },
-	[164] = { names = { enUS = "Blacksmithing", esES = "Herrería" }, ranks = { 2018, 3100, 3538, 9785, 29844, 51300 } },
-	[333] = { names = { enUS = "Enchanting", esES = "Encantamiento" }, ranks = { 7411, 7412, 7413, 13920, 28029, 51313 } },
-	[202] = { names = { enUS = "Engineering", esES = "Ingeniería" }, ranks = { 4036, 4037, 4038, 12656, 30350, 51306 } },
+	[171] = { names = { enUS = "Alchemy", esES = "Alquimia" }, ranks = { 2259, 3101, 3464, 11611, 28596, 51304 },
+		icon = "Interface\\Icons\\Trade_Alchemy" },
+	[164] = { names = { enUS = "Blacksmithing", esES = "Herrería" }, ranks = { 2018, 3100, 3538, 9785, 29844, 51300 },
+		icon = "Interface\\Icons\\Trade_BlackSmithing" },
+	[333] = { names = { enUS = "Enchanting", esES = "Encantamiento" }, ranks = { 7411, 7412, 7413, 13920, 28029, 51313 },
+		icon = "Interface\\Icons\\Trade_Engraving" },
+	[202] = { names = { enUS = "Engineering", esES = "Ingeniería" }, ranks = { 4036, 4037, 4038, 12656, 30350, 51306 },
+		icon = "Interface\\Icons\\Trade_Engineering" },
 	[773] = { names = { enUS = "Inscription", esES = "Inscripción" }, ranks = { 45357, 45358, 45359, 45360, 45361, 45363 } },
-	[755] = { names = { enUS = "Jewelcrafting", esES = "Joyería" }, ranks = { 25229, 25230, 28894, 28895, 28897, 51311 } },
-	[165] = { names = { enUS = "Leatherworking", esES = "Peletería" }, ranks = { 2108, 3104, 3811, 10662, 32549, 51302 } },
-	[197] = { names = { enUS = "Tailoring", esES = "Sastrería" }, ranks = { 3908, 3909, 3910, 12180, 26790, 51309 } },
-	[185] = { names = { enUS = "Cooking", esES = "Cocina" }, ranks = { 2550, 3102, 3413, 18260, 33359, 51296 }, shiftSpell = 818 },
-	[129] = { names = { enUS = "First Aid", esES = "Primeros auxilios" }, ranks = { 3273, 3274, 7924, 10846, 27028, 45542 } },
-	[186] = { names = { enUS = "Mining", esES = "Minería" }, ranks = { 2575, 2576, 3564, 10248, 29354, 50310 }, clickSpell = 2656, shiftSpell = 2580 },
-	[182] = { names = { enUS = "Herbalism", esES = "Herboristería" }, ranks = { 2366, 2368, 3570, 11993, 28695, 50300 }, clickSpell = 2383 },
-	[393] = { names = { enUS = "Skinning", esES = "Desollar" }, ranks = { 8613, 8617, 8618, 10768, 32678, 50305 }, noClick = true },
-	[356] = { names = { enUS = "Fishing", esES = "Pesca" }, ranks = { 7620, 7731, 7732, 18248, 33095, 51294 } },
+	[755] = { names = { enUS = "Jewelcrafting", esES = "Joyería" }, ranks = { 25229, 25230, 28894, 28895, 28897, 51311 },
+		icon = "Interface\\Icons\\INV_Misc_Gem_01" },
+	[165] = { names = { enUS = "Leatherworking", esES = "Peletería" }, ranks = { 2108, 3104, 3811, 10662, 32549, 51302 },
+		icon = "Interface\\Icons\\Trade_LeatherWorking" },
+	[197] = { names = { enUS = "Tailoring", esES = "Sastrería" }, ranks = { 3908, 3909, 3910, 12180, 26790, 51309 },
+		icon = "Interface\\Icons\\Trade_Tailoring" },
+	[185] = { names = { enUS = "Cooking", esES = "Cocina" }, ranks = { 2550, 3102, 3413, 18260, 33359, 51296 },
+		shiftSpell = 818, icon = "Interface\\Icons\\INV_Misc_Food_15" },
+	[129] = { names = { enUS = "First Aid", esES = "Primeros auxilios" }, ranks = { 3273, 3274, 7924, 10846, 27028, 45542 },
+		icon = "Interface\\Icons\\INV_Misc_Bandage_11" },
+	[186] = { names = { enUS = "Mining", esES = "Minería" }, ranks = { 2575, 2576, 3564, 10248, 29354, 50310 },
+		clickSpell = 2656, shiftSpell = 2580, icon = "Interface\\Icons\\Trade_Mining" },
+	[182] = { names = { enUS = "Herbalism", esES = "Herboristería" }, ranks = { 2366, 2368, 3570, 11993, 28695, 50300 },
+		clickSpell = 2383, icon = "Interface\\Icons\\Trade_Herbalism" },
+	[393] = { names = { enUS = "Skinning", esES = "Desollar" }, ranks = { 8613, 8617, 8618, 10768, 32678, 50305 },
+		noClick = true, icon = "Interface\\Icons\\INV_Misc_Pelt_02" },
+	[356] = { names = { enUS = "Fishing", esES = "Pesca" }, ranks = { 7620, 7731, 7732, 18248, 33095, 51294 },
+		icon = "Interface\\Icons\\Trade_Fishing" },
 	[0] = { single = 53428 }, -- Forja de runas (DK): sin línea de habilidad, sin nivel
 }
 local DISPLAY_ORDER = { 171, 164, 333, 202, 773, 755, 165, 197, 186, 182, 393, 185, 129, 356, 0 }
@@ -123,8 +141,15 @@ function P:Rescan()
 	local levels = skillLevels()
 	for position, skillLineId in ipairs(DISPLAY_ORDER) do
 		local def = PROFESSIONS[skillLineId]
-		local spellId = def.single and (known[def.single] and def.single) or (def.ranks and highestKnown(known, def.ranks))
-		if spellId then
+		-- "conocida" se decide por la línea de habilidad (siempre fiable), no por encontrar el
+		-- hechizo exacto en el libro de hechizos: Herboristería y Desollar no tienen un hechizo
+		-- de habilidad ahí, solo sus sub-habilidades (Buscar hierbas) o ninguno.
+		local known1 = def.single and known[def.single]
+		local isKnown = known1 or (not def.single and levels and levels[skillLineId] ~= nil)
+		if isKnown then
+			-- El hechizo de rango exacto es solo para el icono y, si no hay clickSpell/noClick,
+			-- para el propio clic; si no aparece en el libro, se usa clickSpell o el icono fijo.
+			local spellId = def.single or (def.ranks and highestKnown(known, def.ranks))
 			local info = state[skillLineId] or {}
 			state[skillLineId] = info
 			info.spellId = spellId
@@ -170,8 +195,11 @@ function P:GetText(el)
 end
 
 function P:GetIcon(el)
-	local info = state[WCDPanel.elements[el].subId]
-	return info and GetSpellTexture(info.spellId)
+	local skillLineId = WCDPanel.elements[el].subId
+	local info = state[skillLineId]
+	if not info then return end
+	local texture = info.spellId and GetSpellTexture(info.spellId)
+	return texture or PROFESSIONS[skillLineId].icon
 end
 
 function P:OnTooltip(el, tooltip)

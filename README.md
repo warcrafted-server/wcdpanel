@@ -22,8 +22,8 @@ Copy the repository into `World of Warcraft/Interface/AddOns/` under the name `w
 
 On first login with a character, a top bar is already there, laid out like this:
 
-- **Left**: location, bags, durability, quests, gold, loot method, rested XP, guild, performance,
-  and one icon per profession you've learned.
+- **Left**: location, bags, durability, quests, gold, loot method, rested XP, estimated time to
+  next level, guild, performance, and one icon per profession you've learned.
 - **Right**: clock, volume, mail, the auto-hide toggle, and behind it, your own addons' icons
   (both the ones using LibDataBroker and the ones that drop a loose button on the minimap).
 

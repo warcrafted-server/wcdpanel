@@ -82,10 +82,20 @@ local function adopt(name, el)
 	frame:SetParent(container)
 	s.clearAllPoints(frame)
 	s.setPoint(frame, "CENTER", container, "CENTER", 0, 0)
-	frame:SetScale(WCDPanel.db.profile.general.iconSize / math.max(frame:GetHeight(), 1))
+	P:RescaleButton(name)
 	frame:SetFrameStrata(container:GetFrameStrata())
 	frame:SetFrameLevel(container:GetFrameLevel() + 1)
 	frame:Show()
+end
+
+-- Al primer escaneo, algunos botones aún no tienen su tamaño real (0x0, o el addon los
+-- redimensiona más tarde): se reescala en cada ronda, no solo al adoptar. GetWidth/GetHeight no
+-- llevan el SetScale ya aplicado, así que recalcular es seguro y repetible.
+function P:RescaleButton(name)
+	local frame = _G[name]
+	if not frame or not saved[name] then return end
+	local size = math.max(frame:GetWidth() or 0, frame:GetHeight() or 0, 1)
+	frame:SetScale(WCDPanel.db.profile.general.iconSize / size)
 end
 
 local function release(name)
@@ -118,15 +128,24 @@ function P:Collect(name)
 	})
 end
 
-function P:Scan()
-	if not self.enabled then return end
-	WCDPanel.Util.EachNamedChild(Minimap, function(child)
+local function scanParent(self, parent)
+	if not parent then return end
+	WCDPanel.Util.EachNamedChild(parent, function(child)
 		local name = child:GetName()
 		if not saved[name] and not WCDPanel.elements[self:ElementId(name)] and isCandidate(child) then
 			known[name] = true
 			self:Collect(name)
 		end
 	end)
+end
+
+function P:Scan()
+	if not self.enabled then return end
+	-- La mayoría cuelga su botón directamente de Minimap, pero varios (p.ej. algunos que evitan
+	-- la máscara circular) lo cuelgan de MinimapCluster: se comprueban los dos.
+	scanParent(self, Minimap)
+	if MinimapCluster and MinimapCluster ~= Minimap then scanParent(self, MinimapCluster) end
+	for name in pairs(saved) do self:RescaleButton(name) end
 end
 
 function P:OnEnable()

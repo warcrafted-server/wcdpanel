@@ -8,6 +8,7 @@
 	<Script file="Gold\Gold.lua"/>
 	<Script file="LootType\LootType.lua"/>
 	<Script file="RestXP\RestXP.lua"/>
+	<Script file="TTL\TTL.lua"/>
 	<Script file="Guild\Guild.lua"/>
 	<Script file="Performance\Performance.lua"/>
 	<Script file="Professions\Professions.lua"/>
