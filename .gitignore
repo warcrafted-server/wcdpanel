@@ -1,5 +1,5 @@
-# Al repositorio solo va lo que el juego necesita para cargar el addon.
-# README, CHANGELOG, docs/, CLAUDE.md y .agents/ se quedan solo en local.
+# Al repositorio va lo que el juego necesita para cargar el addon, más los README.
+# CHANGELOG, docs/, CLAUDE.md y .agents/ se quedan solo en local.
 /*
 !/.gitignore
 !/wcdpanel.toc
@@ -8,6 +8,8 @@
 !/Locales/
 !/Core/
 !/Plugins/
+!/README.md
+!/README.es.md
 
 # Restos de editores y del sistema dentro de las carpetas del addon
 *.bak
