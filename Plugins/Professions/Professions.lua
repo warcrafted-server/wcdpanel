@@ -139,13 +139,16 @@ function P:Rescan()
 	self.suppressUntil = GetTime() + 1
 	local known = knownSpells()
 	local levels = skillLevels()
+	-- Con la ventana de habilidades abierta no se leen las líneas (ver skillLevels): sin datos no
+	-- se puede saber qué profesiones hay, así que se deja todo como está hasta el próximo escaneo.
+	if not levels then return end
 	for position, skillLineId in ipairs(DISPLAY_ORDER) do
 		local def = PROFESSIONS[skillLineId]
 		-- "conocida" se decide por la línea de habilidad (siempre fiable), no por encontrar el
 		-- hechizo exacto en el libro de hechizos: Herboristería y Desollar no tienen un hechizo
 		-- de habilidad ahí, solo sus sub-habilidades (Buscar hierbas) o ninguno.
 		local known1 = def.single and known[def.single]
-		local isKnown = known1 or (not def.single and levels and levels[skillLineId] ~= nil)
+		local isKnown = known1 or (not def.single and levels[skillLineId] ~= nil)
 		if isKnown then
 			-- El hechizo de rango exacto es solo para el icono y, si no hay clickSpell/noClick,
 			-- para el propio clic; si no aparece en el libro, se usa clickSpell o el icono fijo.
@@ -153,7 +156,7 @@ function P:Rescan()
 			local info = state[skillLineId] or {}
 			state[skillLineId] = info
 			info.spellId = spellId
-			if levels and levels[skillLineId] then
+			if levels[skillLineId] then
 				info.rank, info.maxRank, info.modifier = levels[skillLineId].rank, levels[skillLineId].maxRank, levels[skillLineId].modifier
 			end
 			local el = self:AddElement(skillLineId, {

@@ -34,17 +34,17 @@ end
 
 -- Sin texto que leer, dos iconos consecutivos se juntan más (iconGap) que un icono y una
 -- etiqueta (spacing), para aprovechar el hueco que libera el minimapa.
-local function isIconOnly(runtime, iconSize)
-	return runtime.frame:GetWidth() <= iconSize + 1
+local function isIconOnly(runtime)
+	return runtime.foreign or not (runtime.frame.text and runtime.frame.text:IsShown())
 end
 
-local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, iconGap, iconSize, startOffset, relPointForBar)
+local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, iconGap, startOffset, relPointForBar)
 	local cursor = startOffset
 	local prevFrame, prevIconOnly
 	for _, item in ipairs(list) do
 		local runtime = self.elements[item.id]
 		local frame = runtime.frame
-		local iconOnly = isIconOnly(runtime, iconSize)
+		local iconOnly = isIconOnly(runtime)
 		local gap = (prevIconOnly and iconOnly) and iconGap or spacing
 		frame:ClearAllPoints()
 		if prevFrame and not runtime.secure then
@@ -53,6 +53,7 @@ local function place(self, list, bar, anchorPoint, growPoint, sign, spacing, ico
 			frame:SetPoint(anchorPoint, bar, relPointForBar, sign * cursor, 0)
 		end
 		frame:Show()
+		self:FitElementWidth(item.id)
 		cursor = cursor + frame:GetWidth() + gap
 		prevFrame, prevIconOnly = frame, iconOnly
 	end
@@ -63,22 +64,37 @@ function WCDPanel:Reflow(barId)
 	if not barRuntime then return end
 
 	local general = self.db.profile.general
-	local spacing, iconGap, iconSize = general.spacing, general.iconGap, general.iconSize
+	local spacing, iconGap = general.spacing, general.iconGap
 	local zones = collectZones(self, barId)
 	local bar = barRuntime.frame
 	local edgeGap = math.floor(spacing / 2)
 
-	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, iconGap, iconSize, edgeGap, "LEFT")
-	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, iconGap, iconSize, edgeGap, "RIGHT")
+	place(self, zones.LEFT, bar, "LEFT", "RIGHT", 1, spacing, iconGap, edgeGap, "LEFT")
+	place(self, zones.RIGHT, bar, "RIGHT", "LEFT", -1, spacing, iconGap, edgeGap, "RIGHT")
 
 	local total = 0
 	for i, item in ipairs(zones.CENTER) do
 		total = total + self.elements[item.id].frame:GetWidth()
 		if i > 1 then total = total + spacing end
 	end
-	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, iconGap, iconSize, -total / 2, "CENTER")
+	place(self, zones.CENTER, bar, "LEFT", "RIGHT", 1, spacing, iconGap, -total / 2, "CENTER")
 end
 
 function WCDPanel:ReflowAll()
 	for id in pairs(self.bars) do self:LayoutMarkDirty(id) end
 end
+
+-- Red de seguridad: si un texto cambia de ancho sin pasar por RefreshElement (otro addon cambia
+-- la fuente, el cliente termina de cargarla...), el elemento se queda corto y su texto pisa al
+-- siguiente. Cada 2 s se vuelve a medir todo y se recoloca la barra que haya cambiado.
+function WCDPanel:CheckElementWidths()
+	if not self.db then return end
+	local changed = {}
+	for id in pairs(self.elements) do
+		local cfg = self.db.profile.elements[id]
+		if cfg and cfg.bar and self:FitElementWidth(id) then changed[cfg.bar] = true end
+	end
+	for barId in pairs(changed) do self:LayoutMarkDirty(barId) end
+end
+
+WCDPanel:StartTicker("layout:widths", 2, function() WCDPanel:CheckElementWidths() end)

@@ -254,18 +254,30 @@ function WCDPanel:UpdateElementDisplay(id)
 		frame.text:SetPoint("LEFT", frame, "LEFT", 0, 0)
 	end
 	if text ~= "" then frame.text:Show() else frame.text:Hide() end
+	self:FitElementWidth(id)
+end
 
+-- Ajusta el ancho del elemento al icono + texto que ya tiene puestos. El cliente no maqueta un
+-- FontString hasta que su frame tiene posición (antes GetStringWidth da 0), así que Layout lo
+-- vuelve a llamar tras colocar cada elemento. Devuelve true si el ancho cambió.
+function WCDPanel:FitElementWidth(id)
+	local runtime = self.elements[id]
+	if not runtime or runtime.foreign then return false end
+	local general = self.db.profile.general
+	local frame = runtime.frame
+	local showIcon = frame.icon:IsShown()
+	local hasText = frame.text:IsShown()
 	local width = 0
 	if showIcon then width = general.iconSize end
-	if text ~= "" then
+	if hasText then
 		if showIcon then width = width + ICON_LABEL_GAP end
 		width = width + (frame.text:GetStringWidth() or 0)
 	end
 	width = math.max(math.floor(width + 0.5), general.iconSize)
-	if frame:GetWidth() ~= width then
-		mutate(runtime, "width", function()
-			frame:SetWidth(width)
-			frame:SetHeight(math.max(general.iconSize, 16))
-		end)
-	end
+	if math.abs(frame:GetWidth() - width) < 0.5 then return false end
+	mutate(runtime, "width", function()
+		frame:SetWidth(width)
+		frame:SetHeight(math.max(general.iconSize, 16))
+	end)
+	return true
 end

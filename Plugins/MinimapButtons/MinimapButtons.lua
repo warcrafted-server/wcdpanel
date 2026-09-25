@@ -57,6 +57,34 @@ local function isCandidate(frame)
 	return true
 end
 
+-- Nombre legible de un botón: el título del addon que lo creó si se reconoce por el nombre del
+-- frame (MI2_MinimapButton -> "MI2" -> las iniciales de MobInfo2), si no, el propio nombre limpio.
+local function initials(s) return (s:gsub("[^%u%d]", "")) end
+
+local function friendlyName(name)
+	local base = name:gsub("_?[Mm]ini[Mm]ap", ""):gsub("_?[Bb]utton", ""):gsub("_?[Ff]rame", ""):gsub("_+$", "")
+	if base == "" then base = name end
+	local lbase = base:lower()
+	for i = 1, GetNumAddOns() do
+		local addon, title = GetAddOnInfo(i)
+		if IsAddOnLoaded(i) and (addon:lower() == lbase or addon:lower():sub(1, #lbase) == lbase
+				or (#base >= 2 and initials(addon) == base:upper())) then
+			return ((title or addon):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+		end
+	end
+	return base
+end
+
+-- Algunos botones (el de MobInfo2, por ejemplo) no traen tooltip: en la barra no se sabría de
+-- quién es cada icono, así que se les pone uno con el nombre del addon.
+local function fallbackEnter(self)
+	WCDPanel.Util.AnchorTooltip(GameTooltip, self)
+	GameTooltip:SetText(friendlyName(self:GetName()))
+	GameTooltip:AddLine("Clic: lo que haga el propio addon.", 0.6, 0.6, 0.6)
+	GameTooltip:Show()
+end
+local function fallbackLeave() GameTooltip:Hide() end
+
 local function adopt(name, el)
 	local runtime = WCDPanel.elements[el]
 	local frame = _G[name]
@@ -78,6 +106,11 @@ local function adopt(name, el)
 		frame:SetScript("OnDragStart", nil)
 		frame:SetScript("OnDragStop", nil)
 		WCDPanel:AttachElementDrag(el, frame)
+		if not hasScript(frame, "OnEnter") then
+			s.fallbackTooltip = true
+			frame:SetScript("OnEnter", fallbackEnter)
+			frame:SetScript("OnLeave", fallbackLeave)
+		end
 	end
 	frame:SetParent(container)
 	s.clearAllPoints(frame)
@@ -112,6 +145,10 @@ local function release(name)
 	if s.point[1] then frame:SetPoint(unpack(s.point)) end
 	frame:SetScript("OnDragStart", s.dragStart or nil)
 	frame:SetScript("OnDragStop", s.dragStop or nil)
+	if s.fallbackTooltip then
+		frame:SetScript("OnEnter", nil)
+		frame:SetScript("OnLeave", nil)
+	end
 	frame:Show()
 end
 
