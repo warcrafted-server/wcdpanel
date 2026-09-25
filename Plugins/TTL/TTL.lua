@@ -51,6 +51,13 @@ end
 
 function P:OnEnable()
 	samples, lastXP = {}, UnitXP("player")
+	-- prune() solo se llama al ganar XP: sin esto, quedarse quieto (sin ganar XP) mantendría
+	-- muestras cada vez más viejas y el ritmo calculado se iría desinflando poco a poco.
+	WCDPanel:StartTicker("ttl:prune", 30, function() prune(GetTime()) self:Refresh() end)
+end
+
+function P:OnDisable()
+	WCDPanel:StopTicker("ttl:prune")
 end
 
 function P:OnEvent(event)
